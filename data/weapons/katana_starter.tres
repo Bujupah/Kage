@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="WeaponDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/weapon_definition.gd" id="1_weapon"]
+[ext_resource type="Script" path="res://scripts/combat/move_definition.gd" id="2_move"]
+[ext_resource type="Resource" path="res://data/moves/katana_light_1.tres" id="3_l1"]
+[ext_resource type="Resource" path="res://data/moves/katana_light_2.tres" id="4_l2"]
+[ext_resource type="Resource" path="res://data/moves/katana_light_3.tres" id="5_l3"]
+[ext_resource type="Resource" path="res://data/moves/katana_heavy.tres" id="6_heavy"]
+
+[resource]
+script = ExtResource("1_weapon")
+weapon_id = &"weapon.katana.starter.v1"
+display_name = "Starter Katana"
+light_chain = Array[ExtResource("2_move")]([ExtResource("3_l1"), ExtResource("4_l2"), ExtResource("5_l3")])
+heavy = ExtResource("6_heavy")

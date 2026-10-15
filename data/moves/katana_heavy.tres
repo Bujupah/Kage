@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="MoveDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/combat/move_definition.gd" id="1_move"]
+
+[resource]
+script = ExtResource("1_move")
+move_id = &"move.katana.heavy.v1"
+windup_ticks = 18
+active_ticks = 4
+recovery_ticks = 22
+damage = 28
+posture_damage = 40
+stamina_cost = 28
+hitstun_ticks = 18
+reach = 2.5
+arc_degrees = 70.0
+feint_window_ticks = 10
+feint_stamina_cost = 12
+chainable = false
+lunge_distance = 1.2
+windup_tracking_deg = 5.0
