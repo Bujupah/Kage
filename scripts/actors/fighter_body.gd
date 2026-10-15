@@ -25,6 +25,7 @@ const POSE_BROKEN := Vector3(-70, 10, 0)
 const GLOW_LIGHT := Color(1.0, 0.65, 0.15)
 const GLOW_HEAVY := Color(1.0, 0.15, 0.1)
 const GLOW_PARRY := Color(0.9, 0.95, 1.0)
+const CORRECTION_DECAY := 0.6 ## Share of a network correction still visible after each tick.
 
 var combatant: Combatant
 var spawn_point := Vector3.ZERO
@@ -35,6 +36,7 @@ var _visual := Node3D.new()
 var _sword_pivot := Node3D.new()
 var _body_mat := StandardMaterial3D.new()
 var _sword_mat := StandardMaterial3D.new()
+var _correction_offset := Vector3.ZERO ## World-space visual lag behind the physics body.
 
 
 func setup(c: Combatant, color: Color, spawn: Vector3, face: Vector3) -> void:
@@ -109,6 +111,16 @@ func simulate_movement(intent: CombatIntent, now: int, delta: float) -> void:
 	rotation.y = atan2(-c.facing.x, -c.facing.z)
 
 
+## Keeps the visuals where they were drawn when reconciliation moves the body, then lets them catch
+## up over a few ticks, so small prediction errors blend instead of popping. Cosmetic only.
+func add_visual_correction(offset: Vector3) -> void:
+	_correction_offset += offset
+
+
+func clear_visual_correction() -> void:
+	_correction_offset = Vector3.ZERO
+
+
 func update_presentation(now: int) -> void:
 	var c := combatant
 	var pose := POSE_REST
@@ -161,6 +173,11 @@ func update_presentation(now: int) -> void:
 			_visual.position.y = 0.35
 	if c.state != Combatant.State.DODGE:
 		_visual.scale = Vector3.ONE
+	if _correction_offset.length_squared() > 0.0001:
+		_visual.position += global_basis.inverse() * _correction_offset
+		_correction_offset *= CORRECTION_DECAY
+	else:
+		_correction_offset = Vector3.ZERO
 
 	_sword_pivot.rotation_degrees = pose
 	_sword_mat.emission_enabled = glow_energy > 0.0

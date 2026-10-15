@@ -1,7 +1,8 @@
 class_name CombatHud
 extends CanvasLayer
 ## Placeholder HUD: the four combat resources for player and target, a confirmed-event feed and a
-## centre banner for decisive moments. Reads state only; never changes it.
+## centre banner for decisive moments. Reads state only; never changes it. The target may arrive
+## later (a network opponent joining), so every target read tolerates null.
 
 const FEED_LINES := 7
 const BANNER_SECONDS := 0.9
@@ -17,12 +18,26 @@ var _banner := Label.new()
 var _banner_time := 0.0
 var _status := Label.new()
 var _mode := Label.new()
+var _help := Label.new()
+var _help_text := "WASD move · Shift sprint · LMB light · E heavy\nRMB / Q guard (tap on impact = parry)\nE then RMB during windup = feint · Space dodge\nTab / MMB lock-on · F1 dummy mode · F5 reset · Esc free mouse"
 
 
 func setup(player: FighterBody, target: FighterBody, names: Dictionary) -> void:
 	_player = player
 	_target = target
 	_names = names
+
+
+func set_target(target: FighterBody, names: Dictionary) -> void:
+	_target = target
+	_names = names
+	if not _target_bars.is_empty():
+		(_target_bars["title"] as Label).text = _target_title()
+
+
+func set_help_text(text: String) -> void:
+	_help_text = text
+	_help.text = text
 
 
 func _ready() -> void:
@@ -34,7 +49,7 @@ func _ready() -> void:
 	var left := _panel(root, Control.PRESET_TOP_LEFT, Vector2(20, 20))
 	_player_bars = _bars(left, _names.get(_player.combatant.entity_id, "Player"))
 	var right := _panel(root, Control.PRESET_TOP_RIGHT, Vector2(-300, 20))
-	_target_bars = _bars(right, _names.get(_target.combatant.entity_id, "Target"))
+	_target_bars = _bars(right, _target_title())
 	right.add_child(_mode)
 	_mode.add_theme_font_size_override("font_size", 13)
 	_mode.modulate = Color(1, 1, 1, 0.8)
@@ -58,14 +73,13 @@ func _ready() -> void:
 	_feed.add_theme_color_override("font_outline_color", Color.BLACK)
 	root.add_child(_feed)
 
-	var help := Label.new()
-	help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	help.position = Vector2(20, -150)
-	help.text = "WASD move · Shift sprint · LMB light · E heavy\nRMB / Q guard (tap on impact = parry)\nE then RMB during windup = feint · Space dodge\nTab / MMB lock-on · F1 dummy mode · F5 reset · Esc free mouse"
-	help.add_theme_font_size_override("font_size", 13)
-	help.add_theme_constant_override("outline_size", 4)
-	help.add_theme_color_override("font_outline_color", Color.BLACK)
-	root.add_child(help)
+	_help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_help.position = Vector2(20, -150)
+	_help.text = _help_text
+	_help.add_theme_font_size_override("font_size", 13)
+	_help.add_theme_constant_override("outline_size", 4)
+	_help.add_theme_color_override("font_outline_color", Color.BLACK)
+	root.add_child(_help)
 
 	_status.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_status.position = Vector2(20, -40)
@@ -75,12 +89,16 @@ func _ready() -> void:
 
 
 func set_mode_text(text: String) -> void:
-	_mode.text = "Dummy: " + text
+	_mode.text = text
 
 
 func set_tick_stats(tick: int, sim_usec: int) -> void:
 	_status.text = "sim tick %d @ %d Hz · tick cost %.2f ms · %d fps" % [
 		tick, CombatSimulation.TICK_RATE, sim_usec / 1000.0, Engine.get_frames_per_second()]
+
+
+func set_status_text(text: String) -> void:
+	_status.text = text
 
 
 func push_events(events: Array[Dictionary]) -> void:
@@ -106,6 +124,8 @@ func push_events(events: Array[Dictionary]) -> void:
 			&"dodged":
 				if involves_player:
 					_show_banner("EVADED", Color(0.6, 1.0, 0.7))
+			&"round_reset":
+				_show_banner("FIGHT", Color(1, 1, 1))
 	while _feed_lines.size() > FEED_LINES:
 		_feed_lines.pop_front()
 	_feed.text = "\n".join(_feed_lines)
@@ -115,7 +135,8 @@ func _process(delta: float) -> void:
 	if _player == null:
 		return
 	_fill(_player_bars, _player.combatant.stats)
-	_fill(_target_bars, _target.combatant.stats)
+	if _target != null:
+		_fill(_target_bars, _target.combatant.stats)
 	_banner_time = maxf(_banner_time - delta, 0.0)
 	_banner.modulate.a = clampf(_banner_time / (BANNER_SECONDS * 0.5), 0.0, 1.0)
 
@@ -141,7 +162,15 @@ func _describe(ev: Dictionary) -> String:
 			return "%s evaded %s" % [target, attacker]
 		&"feint":
 			return "%s feinted" % attacker
+		&"round_reset":
+			return "— new round —"
 	return ""
+
+
+func _target_title() -> String:
+	if _target == null:
+		return "Waiting for opponent…"
+	return _names.get(_target.combatant.entity_id, "Target")
 
 
 func _show_banner(text: String, color: Color) -> void:
@@ -167,6 +196,7 @@ func _bars(parent: VBoxContainer, title: String) -> Dictionary:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	parent.add_child(label)
 	return {
+		"title": label,
 		"health": _bar(parent, Color(0.85, 0.2, 0.2), 14),
 		"posture": _bar(parent, Color(1.0, 0.8, 0.2), 8),
 		"stamina": _bar(parent, Color(0.35, 0.8, 0.4), 8),

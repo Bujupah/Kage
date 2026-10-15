@@ -16,6 +16,12 @@ func add(c: Combatant) -> Combatant:
 	return c
 
 
+func remove(entity_id: int) -> void:
+	var c := find(entity_id)
+	if c != null:
+		combatants.erase(c)
+
+
 func find(entity_id: int) -> Combatant:
 	for c in combatants:
 		if c.entity_id == entity_id:

@@ -32,6 +32,7 @@ var state_duration := 0
 var move: MoveDefinition ## Current attack; null outside State.ATTACK.
 var chain_index := 0 ## Index into weapon.light_chain; -1 for the heavy attack.
 var attack_serial := 0 ## Increments per attack instance; scopes hit de-duplication.
+var life := 0 ## Increments on every reset/respawn, so observers can tell a respawn from movement.
 var hit_targets: Dictionary = {} ## entity_id -> true for the current attack instance.
 var dodged_targets: Dictionary = {}
 
@@ -55,6 +56,7 @@ func _init(id: int, team_id: int, weapon_def: WeaponDefinition) -> void:
 
 
 func reset(now: int) -> void:
+	life += 1
 	stats.reset()
 	move = null
 	chain_index = 0
@@ -115,6 +117,30 @@ func max_turn_rad_per_tick(now: int) -> float:
 			if attack_phase(now) == Phase.WINDUP:
 				return deg_to_rad(move.windup_tracking_deg)
 	return 0.0
+
+
+func parry_until_tick() -> int:
+	return _parry_until_tick
+
+
+# --- Replication (clients mirror server state; they never derive outcomes) -----------------------
+
+## Overwrites the observable state with values from a server snapshot. `chain` picks the attack
+## (-1 = heavy) and is ignored outside State.ATTACK.
+func apply_replicated_state(next: State, start_tick: int, duration: int, chain: int, parry_until: int) -> void:
+	state = next
+	state_start_tick = start_tick
+	state_duration = duration
+	_parry_until_tick = parry_until
+	chain_index = chain
+	move = null
+	if next == State.ATTACK:
+		if chain < 0:
+			move = weapon.heavy
+		elif chain < weapon.light_chain.size():
+			move = weapon.light_chain[chain]
+		if move == null:
+			state = State.NEUTRAL
 
 
 # --- Tick entry points (called by CombatSimulation) ----------------------------------------------
