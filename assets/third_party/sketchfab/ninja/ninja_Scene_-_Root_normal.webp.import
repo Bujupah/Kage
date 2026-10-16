@@ -2,19 +2,19 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cfslpk7pcgpx3"
-path="res://.godot/imported/samurai-rigged_rig_metallic-rig_roughness.jpg-10d199a6b47f8a02d04ed3c6be3392cc.ctex"
+uid="uid://dlvq1yxgkb81s"
+path="res://.godot/imported/ninja_Scene_-_Root_normal.webp-a259f1ff6998cb714030f299a443ac7e.ctex"
 metadata={
 "vram_texture": false
 }
 generator_parameters={
-"md5": "83ebdf0066c8662904a4f4abb027f3a3"
+"md5": "da5aa3e7124d07d84f99eff0d51a1e49"
 }
 
 [deps]
 
-source_file="res://assets/third_party/grab3d/samurai/samurai-rigged_rig_metallic-rig_roughness.jpg"
-dest_files=["res://.godot/imported/samurai-rigged_rig_metallic-rig_roughness.jpg-10d199a6b47f8a02d04ed3c6be3392cc.ctex"]
+source_file="res://assets/third_party/sketchfab/ninja/ninja_Scene_-_Root_normal.webp"
+dest_files=["res://.godot/imported/ninja_Scene_-_Root_normal.webp-a259f1ff6998cb714030f299a443ac7e.ctex"]
 
 [params]
 

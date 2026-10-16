@@ -19,7 +19,7 @@ func setup(slot_name: String, id: String, status: String) -> ItemCard:
 	var e := CosmeticCatalog.entry(slot, id)
 	var r := int(e.get("rarity", 0))
 	toggle_mode = true
-	custom_minimum_size = Vector2(250, 92)
+	custom_minimum_size = Vector2(250, 84)
 	focus_mode = Control.FOCUS_ALL
 	var color: Color = CosmeticCatalog.RARITY_COLORS[r]
 	# Lacquer-black card, hairline border in the rarity colour, a rarity strip along the top; the

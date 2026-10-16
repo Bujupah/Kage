@@ -9,20 +9,22 @@ const BUSES: Array[String] = ["Music", "Ambience", "Combat", "UI"]
 
 const DEFAULTS := {
 	"video": {
-		"window_mode": 0, # 0 windowed, 1 borderless fullscreen, 2 exclusive fullscreen
+		"window_mode": 1, # 0 windowed, 1 borderless fullscreen (native resolution), 2 exclusive fullscreen
 		"vsync": true,
 		"max_fps": 0,
-		"render_scale": 1.0,
+		"render_scale": 0.6, # High: MetalFX/FSR 2 reconstruct native (5K) output from 60%
 		"shadows": 2, # 0 off, 1 low, 2 high
 		"ssao": true,
 		"mist": true,
-		"msaa": 1, # 0 off, 1 2x, 2 4x
+		"msaa": 0, # 0 off, 1 2x, 2 4x
 		"fov": 70.0,
 		"preset": 2, # 0 low, 1 medium, 2 high, 3 ultra, 4 custom
-		"upscaler": 0, # 0 off, 1 FSR 1, 2 FSR 2, 3 MetalFX (temporal)
+		"upscaler": 3, # 0 off, 1 FSR 1, 2 FSR 2, 3 MetalFX (temporal; FSR 2 where unsupported)
 		"taa": false,
 		"gi": 1, # 0 off, 1 SSIL, 2 SDFGI
 		"lod": 1, # 0 performance, 1 balanced, 2 quality
+		"post_fx": true, # CAS sharpening, night grade, lens character (PostFx)
+		"sharpen": 0.35,
 	},
 	"audio": {"Master": 0.8, "Music": 0.7, "Ambience": 0.6, "Combat": 0.9, "UI": 0.7},
 	"gameplay": {"mouse_sensitivity": 1.0, "invert_y": false, "camera_shake": true, "hints": true},
@@ -188,7 +190,9 @@ static func apply_audio() -> void:
 static func apply_window() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
-	match int(get_value("video", "window_mode")):
+	# `-- --windowed` forces a window (several local clients side by side for testing).
+	var mode := 0 if OS.get_cmdline_user_args().has("--windowed") else int(get_value("video", "window_mode"))
+	match mode:
 		1:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		2:
@@ -196,6 +200,14 @@ static func apply_window() -> void:
 		_:
 			if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED:
 				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			var screen := DisplayServer.window_get_current_screen()
+			var usable := DisplayServer.screen_get_usable_rect(screen)
+			if DisplayServer.window_get_size().x >= usable.size.x:
+				# Leaving fullscreen: a 1600x900 (HiDPI-scaled) window, centred, not a screen-sized one.
+				var want := Vector2i(Vector2(1600, 900) * DisplayServer.screen_get_scale(screen))
+				want = want.min(usable.size * 9 / 10)
+				DisplayServer.window_set_size(want)
+				DisplayServer.window_set_position(usable.position + (usable.size - want) / 2)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if get_value("video", "vsync") else DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = int(get_value("video", "max_fps"))
 
@@ -231,15 +243,15 @@ static func apply_world(root: Node) -> void:
 			env.sdfgi_enabled = gi == 2
 			env.sdfgi_use_occlusion = true
 			env.volumetric_fog_enabled = bool(get_value("video", "mist"))
-			env.volumetric_fog_density = 0.0018
 
 
 ## Quality presets set several options at once (GUI.md §6 "preset"). Any manual change afterwards
 ## marks the preset as Custom.
 const PRESETS := [
-	{"render_scale": 0.75, "upscaler": 1, "shadows": 1, "ssao": false, "mist": false, "msaa": 0, "taa": false, "gi": 0, "lod": 0},
-	{"render_scale": 0.85, "upscaler": 2, "shadows": 1, "ssao": true, "mist": true, "msaa": 0, "taa": false, "gi": 1, "lod": 1},
-	{"render_scale": 1.0, "upscaler": 0, "shadows": 2, "ssao": true, "mist": true, "msaa": 1, "taa": false, "gi": 1, "lod": 1},
+	{"render_scale": 0.5, "upscaler": 1, "shadows": 1, "ssao": false, "mist": false, "msaa": 0, "taa": false, "gi": 0, "lod": 0},
+	{"render_scale": 0.6, "upscaler": 2, "shadows": 1, "ssao": true, "mist": true, "msaa": 0, "taa": false, "gi": 1, "lod": 1},
+	# High: temporal upscaling from 60% keeps fullscreen at native 4K/5K smooth; the upscaler also anti-aliases.
+	{"render_scale": 0.6, "upscaler": 3, "shadows": 2, "ssao": true, "mist": true, "msaa": 0, "taa": false, "gi": 1, "lod": 1},
 	{"render_scale": 1.0, "upscaler": 0, "shadows": 2, "ssao": true, "mist": true, "msaa": 0, "taa": true, "gi": 2, "lod": 2},
 ]
 const PRESET_KEYS := ["render_scale", "upscaler", "shadows", "ssao", "mist", "msaa", "taa", "gi", "lod"]

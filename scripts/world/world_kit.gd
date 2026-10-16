@@ -170,8 +170,8 @@ static func light(parent: Node3D, at: Vector3, color: Color = LANTERN_LIGHT, ene
 	l.omni_attenuation = 1.4
 	l.position = at
 	l.distance_fade_enabled = true
-	l.distance_fade_begin = 40.0
-	l.distance_fade_length = 15.0
+	l.distance_fade_begin = 28.0
+	l.distance_fade_length = 10.0
 	parent.add_child(l)
 	return l
 
@@ -385,8 +385,8 @@ static func bamboo_grove(parent: Node3D, area: Rect2, clumps: int, keep_clear: A
 			var height := rng.randf_range(6.5, 10.5)
 			var lean := Basis.from_euler(Vector3(rng.randf_range(-0.07, 0.07), 0, rng.randf_range(-0.07, 0.07)))
 			stalk_xforms.append(Transform3D(lean.scaled(Vector3(1, height, 1)), p + off + lean * Vector3.UP * height * 0.5))
-			for k in 2:
-				var top := p + off + lean * Vector3.UP * height * rng.randf_range(0.62, 0.95)
+			for k in 1:
+				var top := p + off + lean * Vector3.UP * height * rng.randf_range(0.7, 0.92)
 				var b := Basis.from_euler(Vector3(rng.randf_range(-0.5, 0.5), rng.randf_range(0, TAU), rng.randf_range(-0.3, 0.3)))
 				leaf_xforms.append(Transform3D(b, top))
 		var shape := CollisionShape3D.new()
@@ -396,8 +396,24 @@ static func bamboo_grove(parent: Node3D, area: Rect2, clumps: int, keep_clear: A
 		shape.shape = cyl
 		shape.position = p + Vector3.UP * 2.0
 		collider.add_child(shape)
+	if not AssetKit.visuals_enabled():
+		return # The server needs the clump colliders only.
 	_emit_chunked(parent, stalk_mesh, stalk_xforms, rng, 130.0, true)
-	_emit_chunked(parent, leaf_mesh, leaf_xforms, rng, 95.0, true)
+	# Canopy: real leaf clusters from the CC-BY "Free Bamboo Set" (JonhGillessen), one MultiMesh per
+	# variant per cell; flat procedural cards only if the pack is missing.
+	var clusters := _bamboo_leaf_meshes()
+	if clusters.is_empty():
+		_emit_chunked(parent, leaf_mesh, leaf_xforms, rng, 95.0, true)
+		return
+	var by_variant: Array = []
+	for _v in clusters.size():
+		by_variant.append([] as Array[Transform3D])
+	for x in leaf_xforms:
+		var k := rng.randf_range(2.4, 3.4)
+		(by_variant[rng.randi_range(0, clusters.size() - 1)] as Array[Transform3D]).append(
+				Transform3D(x.basis.orthonormalized().scaled(Vector3.ONE * k), x.origin))
+	for v in clusters.size():
+		_emit_chunked(parent, clusters[v], by_variant[v], rng, 80.0, true)
 
 
 ## One MultiMeshInstance3D per BAMBOO_CELL, so frustum culling, shadow cascades and distance
@@ -427,6 +443,47 @@ static func _emit_chunked(parent: Node3D, mesh: Mesh, xforms: Array[Transform3D]
 		inst.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		parent.add_child(inst)
+
+
+const BAMBOO_PACK := "res://assets/third_party/sketchfab/bamboo/bamboo.glb"
+const BAMBOO_CLUSTERS := ["Object_5", "Object_8", "Object_11", "Object_16"] ## Alpha leaf sprays in the pack.
+static var _leaf_clusters: Array[Mesh] = []
+
+
+## Leaf sprays re-centred on their stem and normalised to ~1 m, so instance scale is metres.
+static func _bamboo_leaf_meshes() -> Array[Mesh]:
+	if not _leaf_clusters.is_empty() or not ResourceLoader.exists(BAMBOO_PACK):
+		return _leaf_clusters
+	var pack: Node = (load(BAMBOO_PACK) as PackedScene).instantiate()
+	for mi: MeshInstance3D in pack.find_children("*", "MeshInstance3D", true, false):
+		if not BAMBOO_CLUSTERS.has(String(mi.name)):
+			continue
+		var xf := mi.transform
+		var p := mi.get_parent()
+		while p != null and p != pack:
+			if p is Node3D:
+				xf = (p as Node3D).transform * xf
+			p = p.get_parent()
+		var aabb: AABB = xf * mi.mesh.get_aabb()
+		var k := 1.0 / maxf(aabb.size.x, maxf(aabb.size.y, aabb.size.z))
+		var norm := Transform3D(Basis.from_scale(Vector3.ONE * k), -aabb.get_center() * k) * xf
+		var out := ArrayMesh.new()
+		for si in mi.mesh.get_surface_count():
+			var st := SurfaceTool.new()
+			st.append_from(mi.mesh, si, norm)
+			st.commit(out)
+			var src := mi.mesh.surface_get_material(si) as BaseMaterial3D
+			var mat := src.duplicate() as BaseMaterial3D
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			mat.alpha_scissor_threshold = 0.45
+			mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			mat.backlight_enabled = true # Moon- and lantern-light through the leaves.
+			mat.backlight = Color(0.25, 0.32, 0.12)
+			mat.albedo_color = Color(0.82, 0.9, 0.78)
+			out.surface_set_material(out.get_surface_count() - 1, mat)
+		_leaf_clusters.append(out)
+	pack.free()
+	return _leaf_clusters
 
 
 static func _bamboo_material() -> ShaderMaterial:

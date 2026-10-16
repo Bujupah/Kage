@@ -82,6 +82,9 @@ func _video() -> Control:
 			"Ignored while a temporal upscaler is active (it already anti-aliases)."))
 	v.add_child(UiKit.option_row("Global illumination", ["Off", "Screen-space (SSIL)", "SDFGI (bounce light)"],
 			int(GameSettings.get_value("video", "gi")), _custom("gi")))
+	v.add_child(UiKit.check_row("Image enhancement", bool(GameSettings.get_value("video", "post_fx")), _setter("video", "post_fx"),
+			"Contrast-adaptive sharpening, night colour grade and subtle lens character."))
+	v.add_child(UiKit.slider_row("Sharpening", 0.0, 1.0, 0.05, float(GameSettings.get_value("video", "sharpen")), _setter("video", "sharpen")))
 	v.add_child(UiKit.option_row("Level of detail", ["Performance", "Balanced", "Quality"],
 			int(GameSettings.get_value("video", "lod")), _custom("lod")))
 	v.add_child(UiKit.option_row("Display mode", ["Windowed", "Borderless fullscreen", "Exclusive fullscreen"],

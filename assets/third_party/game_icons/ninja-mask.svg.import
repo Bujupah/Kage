@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bop3y7bl56qn5"
-path="res://.godot/imported/samurai-rigged_rig_normal.jpg-0ce19c4d5443e88241d37292e9d35e62.ctex"
+uid="uid://dpcxhdfp1mppc"
+path="res://.godot/imported/ninja-mask.svg-939319ea717ab36389df4f5356d3093a.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "0776c9210023260439527f381045f65f"
 }
 
 [deps]
 
-source_file="res://assets/third_party/grab3d/samurai/samurai-rigged_rig_normal.jpg"
-dest_files=["res://.godot/imported/samurai-rigged_rig_normal.jpg-0ce19c4d5443e88241d37292e9d35e62.ctex"]
+source_file="res://assets/third_party/game_icons/ninja-mask.svg"
+dest_files=["res://.godot/imported/ninja-mask.svg-939319ea717ab36389df4f5356d3093a.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -41,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

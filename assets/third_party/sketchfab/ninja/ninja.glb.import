@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://c64ghola7fn8v"
-path="res://.godot/imported/samurai-rigged.glb-ad7b1444c81e564379288aec73e9a207.scn"
+uid="uid://d0o6xagg64f1k"
+path="res://.godot/imported/ninja.glb-ff29e179a0ac8c713a1a7100ed668ed0.scn"
 
 [deps]
 
-source_file="res://assets/third_party/grab3d/samurai/samurai-rigged.glb"
-dest_files=["res://.godot/imported/samurai-rigged.glb-ad7b1444c81e564379288aec73e9a207.scn"]
+source_file="res://assets/third_party/sketchfab/ninja/ninja.glb"
+dest_files=["res://.godot/imported/ninja.glb-ff29e179a0ac8c713a1a7100ed668ed0.scn"]
 
 [params]
 
@@ -41,8 +41,8 @@ materials/extract_format=0
 materials/extract_path=""
 _subresources={
 "nodes": {
-"PATH:Armature/Skeleton3D": {
-"retarget/bone_map": Resource("res://assets/retarget/samurai_bone_map.tres"),
+"PATH:Sketchfab_model/adaf63a942514aebb5a9b5551f96f472_fbx/Object_2/RootNode/Object_4/Skeleton3D": {
+"retarget/bone_map": Resource("res://assets/retarget/ninja_bone_map.tres"),
 "retarget/bone_renamer/unique_node/make_unique": true,
 "retarget/bone_renamer/unique_node/skeleton_name": "GeneralSkeleton",
 "retarget/remove_tracks/unmapped_bones": true,

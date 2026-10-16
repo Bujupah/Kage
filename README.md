@@ -1,6 +1,6 @@
 # Kage (working title: Samurai Assassin)
 
-Third-person PvPvE samurai battleground. Design lives in [GDD.md](GDD.md), boundaries in
+Third-person PvPvE assassin battleground set in a fictional Edo-era province. Design lives in [GDD.md](GDD.md), boundaries in
 [ARCHITECTURE.md](ARCHITECTURE.md), wire behaviour in [MULTIPLAYER.md](MULTIPLAYER.md), world in
 [ENVIRONMENT.md](ENVIRONMENT.md), art in [3DMODELS.md](3DMODELS.md), interface in [GUI.md](GUI.md).
 
@@ -8,9 +8,9 @@ Third-person PvPvE samurai battleground. Design lives in [GDD.md](GDD.md), bound
 tick-based combat rules for players and server-driven bandit NPCs. Clients predict their own movement;
 hits, parries, posture, death and zone rules are server-authoritative. Players enter in the Lantern
 Village sanctuary and walk past the vermilion torii into the PvP frontier (bamboo grove, clearing,
-ruin) where the bandit camps are. The client presents it with a 4K-textured samurai (CC0) retargeted
+ruin) where the bandit camps are. The client presents it with a 4K-textured assassin (CC BY) retargeted
 onto shared animation, armour/blade/scarf cosmetics, Terrain3D hills under a golden-hour HDRI, and a
-Where Winds Meet-style title screen showing your own samurai, plus Armory and Store.
+Where Winds Meet-style title screen showing your own assassin, plus Armory and Store.
 
 ## Run
 
@@ -22,7 +22,9 @@ Game with menus (splash → first-run accessibility → title menu → Training 
 /Applications/Godot.app/Contents/MacOS/Godot --path .
 ```
 
-Or open the folder in the Godot editor and press F5. `-- --sandbox` skips straight to the dojo.
+Or open the folder in the Godot editor and press F5. The game opens borderless fullscreen at the
+display's native resolution (change it in Settings → Video → Display mode); `-- --windowed` forces a
+window. `-- --sandbox` skips straight to the dojo.
 
 Two-player duel: start the headless server, then two windowed clients (same machine or LAN):
 
@@ -115,13 +117,13 @@ Dummy modes: passive, always-guard (posture pressure), rhythmic attacks (parry p
   - Region server: sanctuary spawns (`--spawn=arena|frontier` for tests), per-fighter respawn,
     four PvE bandits that aggro only where combat is legal and leash home. `NpcDirector` drives them
     with the same intents players send, so they obey every rule.
-  - Character: the Grab3D CC0 samurai (4K PBR, rigged) and both Quaternius CC0 animation libraries
+  - Character: the CC BY "Ninja" by histrix88 (4K PBR, Mixamo rig, retargeted) and both Quaternius CC0 animation libraries
     are retargeted at import onto Godot's humanoid profile (`assets/retarget/`), so any humanoid body
     can replace it. The katana grip is derived from the hand bones, and the scarf ties at the cuirass.
   - Cosmetics: `CosmeticCatalog` (armour lacquers recoloured by shader on the 4K textures, blade
     finishes, scarves). Appearance is replicated as IDs, the server sanitises them, and they carry
     no stats. The Armory and Store use live try-on; the wallet is demo currency (no payments yet).
-  - Menu: the 3D `MenuStage` (your samurai on a lit iaidō set, drag to turn, camera framings per
+  - Menu: the 3D `MenuStage` (your assassin on a lit iaidō set, drag to turn, camera framings per
     screen), serif menu, player card and wallet.
   - Environment: Terrain3D (MIT) hills with a painted forest floor, instanced grass and an instanced
     sugi forest; HDRI sky and IBL, AgX tonemapping, volumetric haze. The playable area stays flat for

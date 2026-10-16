@@ -1,20 +1,21 @@
 class_name AssassinModel
 extends Node3D
-## Animated samurai (3DMODELS.md §2): the CC0 Grab3D samurai (4K PBR lacquered armour, sheathed
-## saya on the hip), the Poly Haven antique katana drawn in the right hand and a long procedural
-## scarf. Appearance (armour lacquer, blade finish, scarf) comes from CosmeticCatalog IDs.
+## Animated assassin (3DMODELS.md §2): the CC BY "Ninja" by histrix88 (4K PBR shinobi garb, a
+## ninjatō on the back), the Poly Haven antique katana drawn in the right hand and a long procedural
+## scarf. Appearance (garb dye, blade finish and enchantment, scarf) comes from CosmeticCatalog IDs.
 ##
 ## Presentation only. drive() maps the replicated combat state (state, phase, start tick, attack
 ## chain) to clips and stretches each clip to the authored frame data, so a swing's strike lands
 ## on the move's active ticks. Nothing here feeds back into rules (3DMODELS.md §11.4).
 ##
-## Animation: both Quaternius CC0 libraries and the samurai are retargeted at import onto Godot's
+## Animation: both Quaternius CC0 libraries and the body are retargeted at import onto Godot's
 ## SkeletonProfileHumanoid (BoneMaps in assets/retarget/, tools/make_bone_maps.gd), so every clip
 ## addresses %GeneralSkeleton:<ProfileBone> and plays on any humanoid body we swap in later.
 
 # Loaded on demand (not preloaded) so the headless server, which references this script through
 # FighterBody but never builds visuals, never loads character art.
-const BODY_PATH := "res://assets/third_party/grab3d/samurai/samurai-rigged.glb"
+const BODY_PATH := "res://assets/third_party/sketchfab/ninja/ninja.glb"
+const HIPS_HEIGHT := 0.97 ## Metres; the body is scaled so its rest hips sit here (source units vary).
 const UAL2_PATH := "res://assets/third_party/quaternius_ual2/Unreal-Godot/UAL2_Standard.glb"
 const UAL1_PATH := "res://assets/third_party/quaternius_ual1/Godot/AnimationLibrary_Godot_Standard.glb"
 const KATANA_PATH := "res://assets/third_party/polyhaven/models/antique_katana_01/antique_katana_01.gltf"
@@ -38,19 +39,20 @@ const GRIP_Z := Vector3(-1, 0, 0)
 const PALM := Vector3(0.03, 0.062, 0.012)
 const GRIP_ON_HANDLE := -0.13 ## Katana-space Y the fist closes on (mid tsuka, below the tsuba).
 ## Blade root/tip in katana space, used for sword trails.
-## Scarf ties on at the back of the cuirass, where ō-yoroi carry the agemaki cord (UpperChest
-## space, -Z is behind), clear of the back plate.
-const SCARF_ANCHOR := Vector3(0, 0.1, -0.24)
+## Scarf knots at the nape, behind the hood (UpperChest space, -Z is behind), clear of the
+## ninjatō scabbard on the back.
+const SCARF_ANCHOR := Vector3(0, 0.16, -0.14)
 const BLADE_ROOT := Vector3(0, 0.06, 0)
 const BLADE_TIP := Vector3(0, 0.69, 0)
 
 const GLOW_LIGHT := Color(1.0, 0.65, 0.15)
 const GLOW_HEAVY := Color(1.0, 0.15, 0.1)
 const GLOW_PARRY := Color(0.9, 0.95, 1.0)
+const REST_GLOW := 1.1 ## Enchanted edge at rest: visible at night, far below telegraph energies.
 
 static var _shared_library: AnimationLibrary
 
-var body_color := Color(0.16, 0.17, 0.2) ## Unused by the samurai body (kept for API compatibility).
+var body_color := Color(0.16, 0.17, 0.2) ## Unused by the textured body (kept for API compatibility).
 var accent_color := Color(0.62, 0.1, 0.08) ## Trail tint.
 var scarf_enabled := true
 var appearance: Dictionary = CosmeticCatalog.DEFAULTS.duplicate()
@@ -61,19 +63,27 @@ var trail: SwordTrail
 
 var _player: AnimationPlayer
 var _armor_mat: ShaderMaterial
-var _blade_mats: Array[StandardMaterial3D] = []
+var _blade_mats: Array[ShaderMaterial] = []
 var _blade_glow := Color.BLACK ## Skin accent added to the telegraph glow.
 var _clip_key := ""
 var _hold_at := -1.0
 var _scarf: ScarfChain
+var _body_scale := 1.0
+var _enchant: EnchantFx
 
 
 func _ready() -> void:
 	var body: Node3D = (load(BODY_PATH) as PackedScene).instantiate()
 	body.name = "Body"
-	body.rotation.y = PI # The samurai faces +Z; fighters face -Z.
+	body.rotation.y = PI # The body faces +Z; fighters face -Z.
 	add_child(body)
 	skeleton = body.find_children("*", "Skeleton3D")[0]
+	# Normalise source units (the Sketchfab export is in centimetre-ish units) to real height.
+	var to_body := _relative(body, skeleton)
+	var hips_y := (to_body * skeleton.get_bone_global_rest(skeleton.find_bone(&"Hips"))).origin.y
+	if hips_y > 0.01:
+		_body_scale = HIPS_HEIGHT / hips_y
+		body.scale = Vector3.ONE * _body_scale
 	_player = body.find_children("*", "AnimationPlayer")[0]
 	_player.add_animation_library(LIBRARY, shared_library())
 	_player.playback_default_blend_time = BLEND
@@ -89,13 +99,15 @@ func _ready() -> void:
 	katana = _attach(&"RightHand", "weapon_hand_r", (load(KATANA_PATH) as PackedScene).instantiate(), grip)
 	for mi: MeshInstance3D in katana.find_children("*", "MeshInstance3D"):
 		for s in mi.mesh.get_surface_count():
-			var mat := (mi.mesh.surface_get_material(s) as StandardMaterial3D).duplicate() as StandardMaterial3D
-			# The scan is a patinated antique; game read needs polished steel that catches the sky.
-			mat.metallic = 1.0
-			mat.roughness = 0.42
-			mat.metallic_specular = 0.6
+			# The scan is a patinated antique; the blade alone becomes polished, glowing steel.
+			var mat := KatanaMaterial.from_standard(mi.mesh.surface_get_material(s) as BaseMaterial3D, _relative(katana, mi))
 			mi.set_surface_override_material(s, mat)
 			_blade_mats.append(mat)
+
+	_enchant = EnchantFx.new()
+	_enchant.position = (BLADE_ROOT + BLADE_TIP) * 0.5
+	_enchant.extents = Vector3(0.01, (BLADE_TIP.y - BLADE_ROOT.y) * 0.5, 0.004)
+	katana.add_child(_enchant)
 
 	trail = SwordTrail.new()
 	trail.color = accent_color.lightened(0.35)
@@ -118,14 +130,16 @@ func apply_appearance(app: Dictionary) -> void:
 	if _armor_mat != null:
 		ArmorMaterial.apply_outfit(_armor_mat, CosmeticCatalog.entry("outfit", appearance["outfit"]))
 	var blade := CosmeticCatalog.entry("blade", appearance["blade"])
-	for mat in _blade_mats:
-		mat.albedo_color = (blade.get("tint", Color.WHITE) as Color) * 1.0
 	_blade_glow = blade.get("glow", Color.BLACK)
+	for mat in _blade_mats: # Rest state (menus, previews); drive() takes over in play.
+		mat.set_shader_parameter("tint", blade.get("tint", Color.WHITE))
+		KatanaMaterial.set_glow(mat, _blade_glow, REST_GLOW if _blade_glow != Color.BLACK else 0.0, 1.0)
 	if trail != null:
 		trail.color = (_blade_glow if _blade_glow != Color.BLACK else Color(1, 0.85, 0.75)).lightened(0.2)
+	if _enchant != null:
+		_enchant.set_effect(str(blade.get("fx", "")), _blade_glow)
 	if _scarf != null:
-		var scarf := CosmeticCatalog.entry("scarf", appearance["scarf"])
-		_scarf.set_look(scarf.get("color", accent_color), float(scarf.get("length", 1.0)))
+		_scarf.set_style(CosmeticCatalog.entry("scarf", appearance["scarf"]))
 
 
 ## All clips in one library. Both sources were retargeted at import, so tracks already address
@@ -271,11 +285,12 @@ func _update_blade(c: Combatant, now: int, phase: Combatant.Phase) -> void:
 				energy = 4.0
 	if energy <= 0.0 and _blade_glow != Color.BLACK:
 		glow = _blade_glow # Skin accent at rest; telegraphs always override it.
-		energy = 0.6
+		energy = REST_GLOW
+	var at_rest := glow == _blade_glow and energy == REST_GLOW
 	for mat in _blade_mats:
-		mat.emission_enabled = energy > 0.0
-		mat.emission = glow
-		mat.emission_energy_multiplier = energy
+		KatanaMaterial.set_glow(mat, glow, energy, 1.0 if at_rest else 0.0)
+	if _enchant != null:
+		_enchant.set_boost(c.state == Combatant.State.ATTACK)
 	trail.emitting = phase == Combatant.Phase.ACTIVE or (phase == Combatant.Phase.WINDUP
 			and c.move != null and c.elapsed(now) >= c.move.windup_ticks - 2)
 
@@ -292,11 +307,22 @@ func set_body_emission(color: Color, energy: float) -> void:
 
 # --- Built parts ---------------------------------------------------------------------------------
 
+## `offset` is in metres in bone space; the body's unit scale is undone so props keep real size.
 func _attach(bone: StringName, marker: String, child: Node3D, offset: Transform3D) -> Node3D:
 	var att := BoneAttachment3D.new()
 	att.name = marker
 	att.bone_name = bone
 	skeleton.add_child(att)
-	child.transform = offset
+	child.transform = Transform3D(Basis.from_scale(Vector3.ONE / _body_scale), Vector3.ZERO) * offset
 	att.add_child(child)
 	return child
+
+
+static func _relative(root: Node, node: Node3D) -> Transform3D:
+	var xf := node.transform
+	var p := node.get_parent()
+	while p != null and p != root:
+		if p is Node3D:
+			xf = (p as Node3D).transform * xf
+		p = p.get_parent()
+	return xf

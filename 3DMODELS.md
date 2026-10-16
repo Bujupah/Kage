@@ -8,7 +8,7 @@
 
 | P0 item (§14) | State | Where |
 |---|---|---|
-| 1. Canonical rig, base body, outfit, long scarf | Grab3D CC0 samurai (4K PBR armour, rigged); canonical rig = Godot `SkeletonProfileHumanoid` via import BoneMaps; verlet scarf tied at the cuirass (`scarf_upper_back`); markers `weapon_hand_r`, `fx_chest`, `fx_root` | `scripts/presentation/assassin_model.gd`, `scarf_chain.gd`, `assets/retarget/` |
+| 1. Canonical rig, base body, outfit, long scarf | CC BY "Ninja" by histrix88 (4K PBR shinobi garb, Mixamo rig, unit-normalised); canonical rig = Godot `SkeletonProfileHumanoid` via import BoneMaps; garb dye shader; verlet silk scarf knotted at the nape (`scarf_upper_back`) with premium patterns and tip particles; enchanted-blade particles (`enchant_fx.gd`); markers `weapon_hand_r`, `fx_chest`, `fx_root` | `scripts/presentation/assassin_model.gd`, `scarf_chain.gd`, `assets/retarget/` |
 | 2. Gameplay katana with sheath and markers | Poly Haven CC0 antique katana with a grip derived from the hand bones; the saya is part of the armour mesh (a drawn katana and the sheathed hilt both show for now) | same |
 | 3. Idle/run/dodge/guard/parry/combo/hit/defeat animations | UAL1 + UAL2 retargeted at import (rest fixer + silhouette fix), stretched to authored frame data so strikes land on active ticks | same |
 | Skins (§2.3, §4) | `CosmeticCatalog`: armour lacquer recolours (shader on the 4K textures), blade finishes, scarves; replicated as sanitised IDs, zero stats | `cosmetic_catalog.gd`, `armor_material.gd` |

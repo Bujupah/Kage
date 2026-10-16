@@ -33,7 +33,7 @@ func _ready() -> void:
 	add_child(player_controller)
 	dummy_brain = DummyBrain.new(dummy, player)
 
-	hud.setup(player, dummy, {PLAYER_ID: "You", DUMMY_ID: "Training Ronin"})
+	hud.setup(player, dummy, {PLAYER_ID: "You", DUMMY_ID: "Training Shinobi"})
 	add_child(hud)
 	hud.set_mode_text("Dummy: " + dummy_brain.mode_name())
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -73,9 +73,9 @@ func _spawn_fighter(id: int, team: int, color: Color, accent: Color, at: Vector3
 	var body := FighterBody.new()
 	body.name = "Fighter%d" % id
 	body.setup(sim.add(Combatant.new(id, team, KATANA)), color, at, face, accent)
-	# The player wears their equipped look; the training ronin wears black lacquer for contrast.
+	# The player wears their equipped look; the training shinobi wears ash-grey garb for contrast.
 	body.appearance = PlayerProfile.appearance() if id == PLAYER_ID else \
-			{"outfit": "arm.obsidian_vow.v1", "blade": "wpn.katana.sumi.v1", "scarf": "scf.shadow_veil.v1"}
+			{"outfit": "gar.ash_walker.v1", "blade": "wpn.katana.sumi.v1", "scarf": "scf.shadow_veil.v1"}
 	add_child(body)
 	_fighters.append(body)
 	return body

@@ -1,6 +1,6 @@
 class_name StoreScreen
 extends UiScreen
-## SHOP-01/02/03 cosmetic store with 3D try-on on your own samurai (GUI.md §5.6). Cosmetics only,
+## SHOP-01/02/03 cosmetic store with 3D try-on on your own assassin (GUI.md §5.6). Cosmetics only,
 ## no combat power. There is no payment provider yet: purchases spend the demo wallet, the banner
 ## says so, and real purchases will be server-verified receipts (never client-reported).
 
@@ -54,7 +54,14 @@ func _ready() -> void:
 	_grid.columns = 2
 	_grid.add_theme_constant_override("h_separation", UiTokens.S2)
 	_grid.add_theme_constant_override("v_separation", UiTokens.S2)
-	panel.add_child(_grid)
+	# Cards scroll inside a fixed band so long catalogues never push the detail panel off screen.
+	var grid_scroll := ScrollContainer.new()
+	grid_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	grid_scroll.custom_minimum_size.y = 312
+	grid_scroll.follow_focus = true
+	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid_scroll.add_child(_grid)
+	panel.add_child(grid_scroll)
 	var detail := PanelContainer.new()
 	detail.theme_type_variation = "Pill"
 	panel.add_child(detail)
@@ -106,7 +113,7 @@ func _select(id: String) -> void:
 			(c as ItemCard).button_pressed = (c as ItemCard).item_id == id
 	var e := CosmeticCatalog.entry(_slot, id)
 	_name.text = e.get("name", id)
-	_blurb.text = e.get("blurb", "")
+	_blurb.text = CosmeticCatalog.describe(_slot, id)
 	_preview = PlayerProfile.appearance()
 	_preview[_slot] = id
 	if shell.stage != null:

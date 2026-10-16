@@ -22,6 +22,9 @@ calligraphy; 9-slice washi panels, sumi brush-swipe hovers, brush-stroke vitals,
 game-icons.net glyphs (CC BY 3.0); lacquer item cards with rarity strips; screen-blur behind in-game
 menus, vignette over the menu stage; HUD edge scrims and text shadows for daylight legibility; zone
 title cards and a full-screen brush defeat screen. Textures baked by `tools/bake_ui_textures.gd`.
+Store and Armory list garb dyes, enchanted blades (embers, frost, lightning, spirit, fire) and premium
+silk scarves (gradient, seigaiha, starfield, glowing tips, tip particles); detail panels list each item's effects.
+Video settings add "Image enhancement" (PostFx) and a sharpening slider.
 
 **Not built, waiting on systems:** GAME-07/08/09/14/15/33 (inventory, equipment, six-skill loadout, loot, stash,
 extraction need P2 inventory/persistence), GAME-29 dialogue (no NPCs), LOAD-03 resume (no session resume in P1),

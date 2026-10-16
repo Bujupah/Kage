@@ -11,11 +11,11 @@
 | Village hub (sanctuary) | Lantern Village: two rows of Shirakawa-go gassho farmhouses, stone lanterns, cherry and maple trees, well square, pagoda landmark (Sketchfab CC BY models) | `scripts/world/province_level.gd` |
 | Dojo | Courtyard duel ring (protected arena) with an open-sided shrine hall, tsuiji-bei walls (posts, tile cap), katana rack, stone lanterns | same |
 | Danger crossing + return gate | Torii approach (sanctuary buffer), authored boundary torii, lit return waystone; rules announced by the HUD title card, not floating text | same |
-| Bamboo combat clearing | Procedural bamboo grove (MultiMesh stalks + leaf cards, real clump colliders), open duel clearing with rim cover, mist volume | `scripts/world/world_kit.gd` |
+| Bamboo combat clearing | Bamboo grove: procedural swaying culms + real leaf sprays from the CC BY "Free Bamboo Set" (chunked MultiMeshes), real clump colliders, open duel clearing with rim cover and campfire, mist volume | `scripts/world/world_kit.gd` |
 | Small ruin | Broken walls, pillars, fallen torii, rubble, cyan "ghost residue" light | same |
 | Region rules (§1.3) | Server-authoritative `ZoneRule` from `RegionMap`, replicated per fighter; no hostile damage in sanctuaries | `scripts/core/zone_rule.gd`, `scripts/world/region_map.gd` |
 | Region transitions | Signage + HUD region pill + pre-entry warning + banner/stinger; rule flag comes from the server | HUD (`combat_hud.gd`) |
-| Basic ambience | Golden-hour HDRI sky + IBL, AgX grading, volumetric haze, warm lanterns, crickets, footsteps by surface | `province_level.gd`, `sfx.gd` |
+| Basic ambience | **Night**: procedural star sky (Milky Way, moon disc that follows the moonlight, clouds; static so radiance is filtered once), cool moonlight key with shadows, warm stone and paper lanterns as local keys, blue volumetric mist, fireflies, a bandit campfire in the grove, crickets, footsteps by surface; final PostFx pass (CAS sharpening, night split-tone grade, lens fringe/vignette, toggle + strength in Video settings) | `province_level.gd`, `night_sky.gd`, `post_fx.gd`, `sfx.gd` |
 | Terrain & foliage | Terrain3D (MIT) hills beyond the walls, painted forest floor, instanced grass, ~1,900-tree pine forest (LOD1 near, LOD2 mid, billboards far, per-96 m chunk MultiMeshes); distant castle on the ridge; playable area kept flat | `province_terrain.gd` |
 | PvE camps | Bandits at the clearing and ruin, server-driven, leashed, never enter sanctuaries | `npc_director.gd` |
 | Optimization (§10) | Static batching per material per 32 m cell, box occluders, chunked MultiMeshes with visibility ranges | `static_batcher.gd`, `world_kit.gd` |

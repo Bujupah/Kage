@@ -1,7 +1,7 @@
 class_name MenuStage
 extends Node3D
 ## The 3D stage behind every menu (GUI.md §5.2, §5.3): a moonlit iaidō courtyard where the
-## player's own samurai stands with their katana, wearing their equipped cosmetics. Screens ask for
+## player's own assassin stands with their katana, wearing their equipped cosmetics. Screens ask for
 ## a framing (title, armory, store) and the camera glides there; dragging rotates the character.
 ## Cinematic but cheap: one character, a small set, baked-feeling light from three sources.
 
@@ -10,7 +10,7 @@ const FRAMES := {
 	"title": [Vector3(-1.55, 1.42, 3.35), Vector3(-0.55, 1.15, 0.0), 42.0],
 	"armory": [Vector3(-0.95, 1.3, 2.55), Vector3(-0.45, 1.05, 0.0), 40.0],
 	"store": [Vector3(0.9, 1.25, 2.6), Vector3(0.4, 1.0, 0.0), 40.0],
-	"blade": [Vector3(-0.5, 1.25, 1.4), Vector3(0.1, 1.0, 0.0), 34.0],
+	"blade": [Vector3(-0.85, 1.35, 2.0), Vector3(0.05, 1.05, 0.0), 36.0],
 }
 const DRAG_SPEED := 0.008
 const FLOURISH_EVERY := 14.0
@@ -19,7 +19,7 @@ var model: AssassinModel
 var _camera := Camera3D.new()
 var _pivot := Node3D.new()
 var _target_frame := "title"
-## Fighters face -Z; the camera looks from +Z, so PI turns the samurai toward us, slightly toward
+## Fighters face -Z; the camera looks from +Z, so PI turns the assassin toward us, slightly toward
 ## the menu column on the left.
 var _yaw := PI - 0.45
 var _yaw_target := PI - 0.45
@@ -31,6 +31,7 @@ var _cam_fov := 42.0
 
 func _ready() -> void:
 	_build_set()
+	_pivot.position.y = 0.12 # Stand on the hinoki dais, not in it.
 	add_child(_pivot)
 	model = AssassinModel.new()
 	model.appearance = PlayerProfile.appearance()

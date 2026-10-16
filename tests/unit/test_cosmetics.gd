@@ -15,7 +15,7 @@ func test_catalog_ids_are_versioned_and_complete() -> void:
 
 
 func test_sanitize_rejects_forged_appearance() -> void:
-	var forged := {"outfit": "arm.does_not_exist.v9", "blade": 42, "scarf": "scf.moonlit_silk.v1", "hitbox": "huge"}
+	var forged := {"outfit": "gar.does_not_exist.v9", "blade": 42, "scarf": "scf.moonlit_silk.v1", "hitbox": "huge"}
 	var clean := CosmeticCatalog.sanitize(forged)
 	assert_eq(clean["outfit"], CosmeticCatalog.DEFAULTS["outfit"], "unknown outfit falls back")
 	assert_eq(clean["blade"], CosmeticCatalog.DEFAULTS["blade"], "non-string blade falls back")
@@ -27,20 +27,20 @@ func test_sanitize_rejects_forged_appearance() -> void:
 func test_purchase_spends_and_grants_once() -> void:
 	PlayerProfile.reset_for_tests()
 	var mon := PlayerProfile.balance("mon")
-	assert_false(PlayerProfile.owns("arm.obsidian_vow.v1"), "not owned yet")
-	assert_false(PlayerProfile.equip("outfit", "arm.obsidian_vow.v1"), "cannot equip unowned")
-	assert_eq(PlayerProfile.purchase("outfit", "arm.obsidian_vow.v1"), "", "purchase ok")
+	assert_false(PlayerProfile.owns("gar.night_heron.v1"), "not owned yet")
+	assert_false(PlayerProfile.equip("outfit", "gar.night_heron.v1"), "cannot equip unowned")
+	assert_eq(PlayerProfile.purchase("outfit", "gar.night_heron.v1"), "", "purchase ok")
 	assert_eq(PlayerProfile.balance("mon"), mon - 1800, "price paid")
-	assert_eq(PlayerProfile.purchase("outfit", "arm.obsidian_vow.v1"), "Already owned.", "no double purchase")
+	assert_eq(PlayerProfile.purchase("outfit", "gar.night_heron.v1"), "Already owned.", "no double purchase")
 	assert_eq(PlayerProfile.balance("mon"), mon - 1800, "charged once")
-	assert_true(PlayerProfile.equip("outfit", "arm.obsidian_vow.v1"), "equip after purchase")
-	assert_eq(PlayerProfile.appearance()["outfit"], "arm.obsidian_vow.v1", "equipped")
+	assert_true(PlayerProfile.equip("outfit", "gar.night_heron.v1"), "equip after purchase")
+	assert_eq(PlayerProfile.appearance()["outfit"], "gar.night_heron.v1", "equipped")
 
 
 func test_cannot_buy_without_funds() -> void:
 	PlayerProfile.reset_for_tests()
-	assert_eq(PlayerProfile.purchase("outfit", "arm.jade_serpent.v1"), "Not enough Jade.", "1400 > 1200 jade")
-	assert_false(PlayerProfile.owns("arm.jade_serpent.v1"), "not granted")
+	assert_eq(PlayerProfile.purchase("outfit", "gar.blood_moon.v1"), "Not enough Jade.", "1400 > 1200 jade")
+	assert_false(PlayerProfile.owns("gar.blood_moon.v1"), "not granted")
 	assert_eq(PlayerProfile.balance("jade"), PlayerProfile.START_JADE, "nothing spent")
 	assert_eq(PlayerProfile.purchase("blade", "wpn.katana.nope.v1"), "Unknown item.", "unknown item")
 
@@ -48,8 +48,8 @@ func test_cannot_buy_without_funds() -> void:
 func test_admission_stores_only_sanitised_appearance() -> void:
 	var reg := PeerRegistry.new(3)
 	var p: PeerRegistry.Peer = reg.try_join(10, NetProtocol.VERSION, "A", 0,
-			{"outfit": "arm.indigo_tide.v1", "blade": "wpn.katana.fake.v1"})["peer"]
-	assert_eq(p.appearance["outfit"], "arm.indigo_tide.v1", "valid outfit kept")
+			{"outfit": "gar.indigo_tide.v1", "blade": "wpn.katana.fake.v1"})["peer"]
+	assert_eq(p.appearance["outfit"], "gar.indigo_tide.v1", "valid outfit kept")
 	assert_eq(p.appearance["blade"], CosmeticCatalog.DEFAULTS["blade"], "forged blade replaced")
 
 
@@ -61,3 +61,26 @@ func test_cosmetics_do_not_change_combat() -> void:
 	for prop in a.get_property_list():
 		assert_false(String(prop["name"]).contains("appearance"), "no cosmetic state in rules")
 	assert_eq(a.weapon.light_chain[0].reach, b.weapon.light_chain[0].reach, "same reach")
+
+
+func test_premium_effects_are_known_and_described() -> void:
+	for slot: String in ["blade", "scarf"]:
+		for id: String in CosmeticCatalog.SLOTS[slot]:
+			var e: Dictionary = CosmeticCatalog.SLOTS[slot][id]
+			if e.has("fx"):
+				assert_true(EnchantFx.KINDS.has(e["fx"]), "%s uses a real effect" % id)
+				assert_true(CosmeticCatalog.describe(slot, id).contains("Effect:"), "%s advertises its effect" % id)
+				assert_true(int(e["rarity"]) >= 2, "%s: effects are rare or better" % id)
+	for id: String in CosmeticCatalog.SCARVES:
+		var pattern := int(CosmeticCatalog.SCARVES[id].get("pattern", 0))
+		assert_true(pattern >= 0 and pattern <= 3, "%s pattern in range" % id)
+	for id: String in CosmeticCatalog.OUTFITS:
+		var e: Dictionary = CosmeticCatalog.OUTFITS[id]
+		assert_true(e.has("dye") or CosmeticCatalog.is_free("outfit", id), "%s dyes the garb" % id)
+
+
+func test_assassin_bone_map_covers_animated_bones() -> void:
+	var bm: BoneMap = load("res://assets/retarget/ninja_bone_map.tres")
+	for bone in ["Hips", "Spine", "Chest", "UpperChest", "Neck", "Head", "LeftUpperArm", "RightHand",
+			"LeftUpperLeg", "RightFoot", "RightIndexProximal"]:
+		assert_false(String(bm.get_skeleton_bone_name(bone)).is_empty(), "%s mapped" % bone)

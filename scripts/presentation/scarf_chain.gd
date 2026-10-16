@@ -29,27 +29,102 @@ var _time := 0.0
 var _mesh := ImmediateMesh.new()
 
 
-var _mat := StandardMaterial3D.new()
+## Silk shader: UV.x runs across the ribbon, UV.y from the knot (0) to the tip (1).
+const SHADER := """
+shader_type spatial;
+render_mode cull_disabled;
+uniform vec3 color1 : source_color = vec3(0.6, 0.1, 0.08);
+uniform vec3 color2 : source_color = vec3(1.0);
+uniform int pattern = 0;
+uniform float shimmer = 0.0;
+uniform float tip_glow = 0.0;
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+
+void fragment() {
+	float u = UV.x;
+	float v = UV.y;
+	vec3 c = color1;
+	vec3 glow = vec3(0.0);
+	if (pattern == 1) {
+		c = mix(color1, color2, smoothstep(0.15, 1.0, v));
+	} else if (pattern == 2) {
+		// Seigaiha: offset rows of concentric wave arcs.
+		vec2 g = vec2(u * 2.0, v * 16.0);
+		float row = floor(g.y);
+		g.x += mod(row, 2.0) * 0.5;
+		vec2 f = vec2(fract(g.x) - 0.5, fract(g.y));
+		float r = length(f);
+		float ring = step(0.5, fract(r * 3.5));
+		c = mix(color1, color2, ring * (1.0 - step(0.62, r)) * 0.85);
+	} else if (pattern == 3) {
+		// Starfield drifting toward the tip, each star on its own twinkle.
+		vec2 g = vec2(u * 5.0, v * 34.0 - TIME * 0.35);
+		vec2 id = floor(g);
+		float h = hash(id);
+		float star = step(0.82, h) * smoothstep(0.28, 0.0, length(fract(g) - 0.5));
+		star *= 0.55 + 0.45 * sin(TIME * 3.0 + h * 40.0);
+		c = mix(color1, color2 * 0.25, smoothstep(0.0, 1.0, v) * 0.5);
+		glow += color2 * star * 2.2;
+	}
+	float band = pow(0.5 + 0.5 * sin(v * 7.0 - TIME * 1.6 + u * 2.0), 10.0);
+	float fres = pow(1.0 - abs(dot(NORMAL, VIEW)), 2.0);
+	ALBEDO = c;
+	ROUGHNESS = 0.75 - shimmer * 0.4;
+	SPECULAR = 0.4 + shimmer * 0.4;
+	BACKLIGHT = c * 0.45;
+	glow += color2 * (fres * 0.35 + band * 0.3) * shimmer;
+	glow += mix(color1, color2, 0.6) * tip_glow * smoothstep(0.8, 1.0, v);
+	EMISSION = glow;
+}
+"""
+
+static var _shader: Shader
+
+var _mat := ShaderMaterial.new()
 var _segment_length := SEGMENT_LENGTH
+var _tip_fx: EnchantFx
 
 
 func _ready() -> void:
 	top_level = true
 	mesh = _mesh
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	_mat.albedo_color = color
-	_mat.roughness = 0.8
-	_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_mat.rim_enabled = true # Silk catches rim light.
-	_mat.rim = 0.35
+	if _shader == null:
+		_shader = Shader.new()
+		_shader.code = SHADER
+	_mat.shader = _shader
+	_mat.set_shader_parameter("color1", color)
 	material_override = _mat
 
 
-## Colour and length multiplier from the scarf cosmetic (Crimson Wanderer is 1.5x).
+## Colour and length multiplier (Crimson Wanderer is 1.5x).
 func set_look(new_color: Color, length_scale: float) -> void:
-	color = new_color
-	_mat.albedo_color = new_color
-	_segment_length = SEGMENT_LENGTH * clampf(length_scale, 0.5, 2.0)
+	set_style({"color": new_color, "length": length_scale})
+
+
+## Full scarf cosmetic: colours, pattern, shimmer, glowing tip and tip particles (CosmeticCatalog).
+func set_style(style: Dictionary) -> void:
+	color = style.get("color", color)
+	_segment_length = SEGMENT_LENGTH * clampf(float(style.get("length", 1.0)), 0.5, 2.0)
+	_mat.set_shader_parameter("color1", color)
+	_mat.set_shader_parameter("color2", style.get("color2", color.lightened(0.3)))
+	_mat.set_shader_parameter("pattern", int(style.get("pattern", 0)))
+	_mat.set_shader_parameter("shimmer", float(style.get("shimmer", 0.0)))
+	_mat.set_shader_parameter("tip_glow", float(style.get("tip_glow", 0.0)))
+	var fx := str(style.get("fx", ""))
+	if fx.is_empty():
+		if _tip_fx != null:
+			_tip_fx.queue_free()
+			_tip_fx = null
+		return
+	if _tip_fx == null:
+		_tip_fx = EnchantFx.new()
+		_tip_fx.extents = Vector3(0.05, 0.05, 0.05)
+		_tip_fx.with_light = false
+		_tip_fx.top_level = true
+		add_child(_tip_fx)
+	_tip_fx.set_effect(fx, style.get("color2", color))
 
 
 func _process(delta: float) -> void:
@@ -65,6 +140,8 @@ func _process(delta: float) -> void:
 		_accumulator -= STEP
 		_simulate(origin)
 	_rebuild()
+	if _tip_fx != null and _points.size() > 3:
+		_tip_fx.global_position = _points[_points.size() - 2]
 
 
 func _reset(origin: Vector3) -> void:
@@ -132,8 +209,11 @@ func _rebuild() -> void:
 		var along := (_points[mini(i + 1, SEGMENTS)] - _points[maxi(i - 1, 0)]).normalized()
 		var across := (side - along * side.dot(along)).normalized()
 		var normal := along.cross(across).normalized()
+		var v := float(i) / SEGMENTS
 		_mesh.surface_set_normal(normal)
+		_mesh.surface_set_uv(Vector2(0.0, v))
 		_mesh.surface_add_vertex(_points[i] - across * w)
 		_mesh.surface_set_normal(normal)
+		_mesh.surface_set_uv(Vector2(1.0, v))
 		_mesh.surface_add_vertex(_points[i] + across * w)
 	_mesh.surface_end()

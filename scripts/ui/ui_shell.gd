@@ -37,7 +37,7 @@ void fragment() {
 }
 """
 var _stack: Array[UiScreen] = []
-var stage: MenuStage ## 3D menu stage with the player's samurai; only exists outside a game.
+var stage: MenuStage ## 3D menu stage with the player's assassin; only exists outside a game.
 var _game: Node
 var _last_join := {}
 
@@ -53,6 +53,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	KageTheme.install()
 	GameSettings.bus.changed.connect(_on_setting_changed)
+	add_child(PostFx.new())
 	var blur := ShaderMaterial.new()
 	blur.shader = Shader.new()
 	blur.shader.code = BLUR_SHADER
@@ -241,7 +242,7 @@ func _on_net_failed(title: String, reason: String) -> void:
 
 # --- Backdrop, toasts ----------------------------------------------------------------------------
 
-## The menu stage (GUI.md §5.2): the player's own samurai on a lit set behind every menu.
+## The menu stage (GUI.md §5.2): the player's own assassin on a lit set behind every menu.
 func _ensure_backdrop() -> void:
 	if stage != null:
 		return

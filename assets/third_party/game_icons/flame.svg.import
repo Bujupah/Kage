@@ -2,19 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://br4a8d5k8tigg"
-path="res://.godot/imported/samurai-rigged_rig_basecolor.jpg-765ad7749b271cb9df5328a40c2c6db9.ctex"
+uid="uid://k3rddup1eenk"
+path="res://.godot/imported/flame.svg-cfa57189901c8760ae0959d8dd74758a.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "af6dc8d2af8aa09b5f98c3f1edd50464"
 }
 
 [deps]
 
-source_file="res://assets/third_party/grab3d/samurai/samurai-rigged_rig_basecolor.jpg"
-dest_files=["res://.godot/imported/samurai-rigged_rig_basecolor.jpg-765ad7749b271cb9df5328a40c2c6db9.ctex"]
+source_file="res://assets/third_party/game_icons/flame.svg"
+dest_files=["res://.godot/imported/flame.svg-cfa57189901c8760ae0959d8dd74758a.ctex"]
 
 [params]
 
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""
@@ -41,3 +38,6 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
+svg/scale=1.0
+editor/scale_with_editor_scale=false
+editor/convert_colors_with_editor_theme=false

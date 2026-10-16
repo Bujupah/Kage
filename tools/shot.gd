@@ -14,7 +14,9 @@ func _initialize() -> void:
 	_args = NetProtocol.parse_args(OS.get_cmdline_user_args())
 	_target = int(_args.get("frames", 40))
 	var size := str(_args.get("size", "1280x720")).split("x")
-	root.size = Vector2i(int(size[0]), int(size[1]))
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED) # The game defaults to fullscreen.
+	_want_size = Vector2i(int(size[0]), int(size[1]))
+	root.size = _want_size
 	DisplayServer.window_set_size(root.size)
 	if _args.has("level"):
 		pass # Built on the first frame, once the root is in the tree (Terrain3D needs that).
@@ -58,18 +60,39 @@ func _turntable() -> void:
 			(ap[0] as AnimationPlayer).play(str(_args["anim"]))
 	else:
 		_model = AssassinModel.new()
+		if _args.has("app"): # --app=outfit_id,blade_id,scarf_id
+			var ids := str(_args["app"]).split(",")
+			_model.appearance = {"outfit": ids[0], "blade": ids[1], "scarf": ids[2]}
 		stage.add_child(_model)
+		if _args.has("night"):
+			env.environment.background_color = Color(0.02, 0.025, 0.04)
+			env.environment.ambient_light_color = Color(0.12, 0.14, 0.2)
+			env.environment.glow_enabled = true
+			sun.light_energy = 0.25
+			sun.light_color = Color(0.6, 0.7, 1.0)
 	if not _args.has("cam"):
 		_args["cam"] = "1.6,1.5,-2.2"
 
 
+var _gpu_ms: Array[float] = []
+var _want_size := Vector2i(1280, 720)
+
+
 func _process(_delta: float) -> bool:
 	_frames += 1
+	# The project opens fullscreen; macOS ignores mode changes mid-animation, so keep asking.
+	if DisplayServer.window_get_mode() != DisplayServer.WINDOW_MODE_WINDOWED and _frames % 10 == 1:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	elif DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_WINDOWED and DisplayServer.window_get_size() != _want_size:
+		DisplayServer.window_set_size(_want_size)
+		root.size = _want_size
 	if _frames == 1 and _args.has("level"):
 		var world := Node3D.new()
 		root.add_child(world)
 		ProvinceLevel.build(world)
 		GameSettings.apply_world(root)
+		if not _args.has("raw"):
+			root.add_child(PostFx.new())
 	if _args.has("push") and _frames == int(_args.get("push_at", 120)) and UiShell.instance != null:
 		UiShell.instance.push(load(str(_args["push"])).new())
 	if _args.has("teleport") and _frames == int(_args.get("teleport_at", 100)):
@@ -78,14 +101,35 @@ func _process(_delta: float) -> bool:
 			(bodies[0] as FighterBody).global_position = _vec(str(_args["teleport"]))
 	if _frames == 3 and _model != null and _args.has("clip"):
 		_model.pose(StringName(str(_args["clip"])), float(_args.get("at", 0.0)))
+	if _frames == 130 and _args.has("ab"): # Perf A/B: --ab=lights|particles|fog|ssil|glow hides one feature.
+		var what := str(_args["ab"])
+		for n in root.find_children("*", "OmniLight3D", true, false):
+			if what == "lights": (n as Node3D).visible = false
+		for n in root.find_children("*", "GPUParticles3D", true, false):
+			if what == "particles": (n as Node3D).visible = false
+		for n in root.find_children("*", "WorldEnvironment", true, false):
+			var e := (n as WorldEnvironment).environment
+			if what == "fog": e.volumetric_fog_enabled = false
+			if what == "ssil": e.ssil_enabled = false
+			if what == "glow": e.glow_enabled = false
+			if what == "ssao": e.ssao_enabled = false
+	if _args.has("stats") and _frames == 140:
+		RenderingServer.viewport_set_measure_render_time(root.get_viewport_rid(), true)
+	if _args.has("stats") and _frames > 150 and _frames < _target - 1:
+		var gpu := RenderingServer.viewport_get_measured_render_time_gpu(root.get_viewport_rid())
+		_gpu_ms.append(gpu if gpu > 0.0 else _delta * 1000.0) # Frame time where GPU timing is unavailable.
 	if _frames == _target - 1 and _args.has("stats"):
-		print("STATS draw_calls=%d objects=%d primitives=%d fps=%d" % [
+		_gpu_ms.sort()
+		var median: float = _gpu_ms[_gpu_ms.size() / 2] if not _gpu_ms.is_empty() else 0.0
+		print("STATS frame_ms=%.2f draw_calls=%d objects=%d primitives=%d fps=%d" % [median,
 			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
 			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
 			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME),
 			Engine.get_frames_per_second()])
 	if _frames == _target:
 		var img := root.get_texture().get_image()
+		if _args.has("debug"):
+			print("DEBUG mode=", DisplayServer.window_get_mode(), " win=", DisplayServer.window_get_size(), " root=", root.size, " img=", img.get_size(), " min=", DisplayServer.window_get_min_size())
 		img.save_png(str(_args.get("out", "user://shot.png")))
 		print("saved ", _args.get("out"))
 		return true

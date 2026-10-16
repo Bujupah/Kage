@@ -1,14 +1,14 @@
 class_name MainMenu
 extends UiScreen
-## HOME-01: title menu over the MenuStage, where the player's own samurai stands on the right
+## HOME-01: title menu over the MenuStage, where the player's own assassin stands on the right
 ## third with their katana. A brush-calligraphy 影 mark heads a column of serif entries that a sumi
 ## swipe paints behind on hover. Drag the empty space to turn the character. Only features that
 ## exist are offered (GUI.md §5.2).
 
 const ENTRIES := [
 	["Enter the Province", "japan", "Explore the Shrouded Province with other players"],
-	["Training Dojo", "ninja-heroic-stance", "Practise timing against the training ronin"],
-	["Armory", "samurai-helmet", "Armour lacquers, blade finishes and scarves"],
+	["Training Dojo", "ninja-heroic-stance", "Practise timing against the training shinobi"],
+	["Armory", "ninja-mask", "Garb dyes, enchanted blades and silk scarves"],
 	["Store", "shopping-bag", "Cosmetics with live try-on"],
 	["Settings", "cog", "Video, audio, controls and accessibility"],
 	["Credits", "scroll-unfurled", "The artists behind every asset"],

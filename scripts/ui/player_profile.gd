@@ -18,7 +18,7 @@ static var _loaded := false
 static var _equipped: Dictionary = {}
 static var _owned: Array[String] = []
 static var _wallet := {"mon": START_MON, "jade": START_JADE}
-static var _title := "Ronin of the Shrouded Province"
+static var _title := "Shadow of the Shrouded Province"
 static var _persist := true
 
 
@@ -65,7 +65,7 @@ static func title() -> String:
 
 static func display_name() -> String:
 	var n := str(GameSettings.get_value("network", "player_name"))
-	return n if not n.is_empty() else "Nameless Ronin"
+	return n if not n.is_empty() else "Nameless Shadow"
 
 
 static func owns(id: String) -> bool:
