@@ -62,15 +62,18 @@ func toggle_lock() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion := event as InputEventMouseMotion
+		var sens := MOUSE_SENSITIVITY * float(GameSettings.get_value("gameplay", "mouse_sensitivity"))
+		var invert := -1.0 if GameSettings.get_value("gameplay", "invert_y") else 1.0
 		if lock_target == null:
-			yaw -= motion.relative.x * MOUSE_SENSITIVITY
-		pitch = clampf(pitch - motion.relative.y * MOUSE_SENSITIVITY, PITCH_MIN, PITCH_MAX)
+			yaw -= motion.relative.x * sens
+		pitch = clampf(pitch - motion.relative.y * sens * invert, PITCH_MIN, PITCH_MAX)
 
 
 func _process(delta: float) -> void:
 	if target == null:
 		return
-	if lock_target != null and not lock_target.combatant.is_alive():
+	_camera.fov = GameSettings.fov()
+	if lock_target != null and (not is_instance_valid(lock_target) or not lock_target.combatant.is_alive()):
 		lock_target = null
 
 	var stick := Input.get_vector("look_left", "look_right", "look_up", "look_down")

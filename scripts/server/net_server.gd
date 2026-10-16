@@ -1,39 +1,48 @@
 class_name NetServer
 extends Node3D
-## Headless authoritative duel server (MULTIPLAYER.md §15 P1). Owns the only CombatSimulation and
-## the only collision-authoritative FighterBodies. Each 30 Hz physics tick it consumes one queued
-## input per player, steps rules and movement, broadcasts confirmed events reliably and sends every
-## player an unreliable-ordered snapshot carrying that player's input ack.
+## Headless authoritative region server (MULTIPLAYER.md §15). Owns the only CombatSimulation and the
+## only collision-authoritative FighterBodies for players and PvE enemies. Each 30 Hz tick it takes
+## one queued input per player plus one intent per NPC, steps rules and movement, applies zone rules,
+## respawns the fallen, broadcasts confirmed events reliably and sends every player an
+## unreliable-ordered snapshot carrying that player's input ack.
 ##
-## No persistence and no real login: admission is the local stub in PeerRegistry.
+## Players enter in the Lantern Village sanctuary (or the dojo ring with --spawn=arena). No
+## persistence and no real login yet: admission is the local stub in PeerRegistry.
 
 const KATANA := preload("res://data/weapons/katana_starter.tres")
-const AUTO_RESET_TICKS := 90
+const RESPAWN_TICKS := 90 ## Players return to their spawn 3 s after falling.
 const JOIN_TIMEOUT_MSEC := 5000 ## Connected peers that never ask to join are dropped.
 const REJECT_DISCONNECT_SEC := 0.5 ## Lets the reliable rejection reach the client first.
 const STATS_EVERY_TICKS := CombatSimulation.TICK_RATE * 10
 
 var port := NetProtocol.DEFAULT_PORT
+var max_players := NetProtocol.MAX_PLAYERS
+var spawn_mode := "sanctuary" ## "sanctuary" (default), "arena" (duel tests) or "frontier" (PvE tests).
+var with_npcs := true
 var sim := CombatSimulation.new()
-var registry := PeerRegistry.new()
+var registry: PeerRegistry
 var session := NetSession.new()
+var npcs := NpcDirector.new()
 
 var _bodies: Dictionary = {} ## entity_id -> FighterBody
 var _connected_at: Dictionary = {} ## peer_id awaiting join -> Time.get_ticks_msec()
-var _dead_since := -1
+var _dead_since: Dictionary = {} ## player entity_id -> tick it fell
 var _tick_usec_max := 0
 var _last_logged_rejects := 0
 
 
 func _ready() -> void:
-	DojoLevel.build(self)
+	registry = PeerRegistry.new(0, max_players)
+	ProvinceLevel.build(self)
+	if with_npcs:
+		npcs.spawn_all(_make_body)
 	session.name = "Session"
 	add_child(session)
 	session.join_requested.connect(_on_join_requested)
 	session.inputs_received.connect(_on_inputs_received)
 
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(port, NetProtocol.MAX_PLAYERS + 2)
+	var err := peer.create_server(port, max_players + 2)
 	if err != OK:
 		push_error("server: cannot listen on UDP %d (%s)" % [port, error_string(err)])
 		get_tree().quit(1)
@@ -44,19 +53,23 @@ func _ready() -> void:
 	multiplayer.multiplayer_peer = peer
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	print("server: listening on UDP %d, protocol v%d, %d Hz" % [port, NetProtocol.VERSION, CombatSimulation.TICK_RATE])
+	print("server: listening on UDP %d, protocol v%d, %d Hz, up to %d players, %d NPCs, %s spawns" % [
+		port, NetProtocol.VERSION, CombatSimulation.TICK_RATE, max_players, npcs.npcs.size(), spawn_mode])
 
 
 func _physics_process(delta: float) -> void:
 	var started := Time.get_ticks_usec()
 	var now := sim.tick
 	var intents := registry.collect_intents()
+	intents.merge(npcs.intents(now, _player_bodies()))
+	for c in sim.combatants:
+		c.zone = RegionMap.rule_at(c.position) # Authoritative rule flag (ENVIRONMENT.md §1.3).
 	sim.begin_tick(intents)
 	for id: int in _bodies:
 		var body: FighterBody = _bodies[id]
 		body.simulate_movement(intents.get(id, CombatIntent.new()), now, delta)
 	var events := sim.end_tick()
-	_auto_reset(now, events)
+	_respawn(now, events)
 	_broadcast(now, events)
 	_log_events(events)
 	_drop_silent_peers()
@@ -86,10 +99,10 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	_send_roster()
 
 
-func _on_join_requested(peer_id: int, version: Variant, player_name: Variant) -> void:
+func _on_join_requested(peer_id: int, version: Variant, player_name: Variant, appearance: Variant) -> void:
 	if not _connected_at.has(peer_id):
 		return # Already joined (or unknown): a repeated join is ignored, never a second fighter.
-	var result := registry.try_join(peer_id, version, player_name, sim.tick)
+	var result := registry.try_join(peer_id, version, player_name, sim.tick, appearance)
 	if not result.has("peer"):
 		print("server: refused peer %d: %s" % [peer_id, result["reason"]])
 		session.join_rejected.rpc_id(peer_id, result["reason"])
@@ -99,16 +112,35 @@ func _on_join_requested(peer_id: int, version: Variant, player_name: Variant) ->
 		return
 	_connected_at.erase(peer_id)
 	var p: PeerRegistry.Peer = result["peer"]
-	var spawn: Array = DojoLevel.SPAWNS[p.slot]
-	var body := FighterBody.new()
-	body.name = "Fighter%d" % p.entity_id
-	body.setup(sim.add(Combatant.new(p.entity_id, p.slot + 1, KATANA)), Color.WHITE, spawn[0], spawn[1])
-	add_child(body)
-	body.respawn(sim.tick)
-	_bodies[p.entity_id] = body
+	var spawns: Array = {"arena": ProvinceLevel.ARENA_SPAWNS, "frontier": ProvinceLevel.FRONTIER_SPAWNS}.get(
+			spawn_mode, ProvinceLevel.SANCTUARY_SPAWNS)
+	var spawn: Array = spawns[p.slot % spawns.size()]
+	# Every player is their own team: anyone may fight anyone where the zone allows it.
+	_make_body(p.entity_id, p.entity_id, spawn[0], spawn[1], p.appearance)
 	print("server: %s joined as entity %d (peer %d, slot %d)" % [p.display_name, p.entity_id, peer_id, p.slot])
 	session.join_accepted.rpc_id(peer_id, p.entity_id, p.epoch, sim.tick)
 	_send_roster()
+
+
+## Builds a collision-only fighter (players and NPCs alike) and registers it with the simulation.
+func _make_body(entity_id: int, team: int, at: Vector3, facing: Vector3, look: Dictionary) -> FighterBody:
+	var body := FighterBody.new()
+	body.with_visuals = false
+	body.name = "Fighter%d" % entity_id
+	body.appearance = look
+	body.setup(sim.add(Combatant.new(entity_id, team, KATANA)), Color.WHITE, at, facing)
+	add_child(body)
+	body.respawn(sim.tick)
+	_bodies[entity_id] = body
+	return body
+
+
+func _player_bodies() -> Dictionary:
+	var out := {}
+	for p in registry.peers():
+		if _bodies.has(p.entity_id):
+			out[p.entity_id] = _bodies[p.entity_id]
+	return out
 
 
 func _on_inputs_received(peer_id: int, epoch: Variant, payload: Variant) -> void:
@@ -129,7 +161,9 @@ func _drop_silent_peers() -> void:
 func _send_roster() -> void:
 	var entries := []
 	for p in registry.peers():
-		entries.append([p.entity_id, p.slot, p.display_name])
+		entries.append([p.entity_id, NetProtocol.KIND_PLAYER, p.display_name, p.appearance])
+	for n in npcs.npcs:
+		entries.append([n.entity_id, NetProtocol.KIND_NPC, n.display_name, n.look])
 	for p in registry.peers():
 		if _is_connected(p.peer_id):
 			session.receive_roster.rpc_id(p.peer_id, entries)
@@ -159,17 +193,22 @@ func _is_connected(peer_id: int) -> bool:
 
 # --- Match rules ---------------------------------------------------------------------------------
 
-func _auto_reset(now: int, events: Array[Dictionary]) -> void:
-	var anyone_dead := sim.combatants.any(func(c: Combatant) -> bool: return not c.is_alive())
-	if not anyone_dead:
-		_dead_since = -1
-	elif _dead_since < 0:
-		_dead_since = now
-	elif now - _dead_since >= AUTO_RESET_TICKS:
-		_dead_since = -1
-		for body: FighterBody in _bodies.values():
+## Fallen players return to their spawn after RESPAWN_TICKS; NPCs after their own cooldown.
+func _respawn(now: int, events: Array[Dictionary]) -> void:
+	for p in registry.peers():
+		var body: FighterBody = _bodies.get(p.entity_id)
+		if body == null:
+			continue
+		if body.combatant.is_alive():
+			_dead_since.erase(p.entity_id)
+		elif not _dead_since.has(p.entity_id):
+			_dead_since[p.entity_id] = now
+		elif now - int(_dead_since[p.entity_id]) >= RESPAWN_TICKS:
+			_dead_since.erase(p.entity_id)
 			body.respawn(sim.tick)
-		events.append({"type": &"round_reset", "tick": now})
+			events.append({"type": &"respawned", "tick": now, "attacker": p.entity_id})
+	for id in npcs.respawn_due(now):
+		events.append({"type": &"respawned", "tick": now, "attacker": id})
 
 
 ## Decisive outcomes only; routine swings and guards stay off the console.
@@ -184,15 +223,15 @@ func _log_events(events: Array[Dictionary]) -> void:
 			&"hit":
 				if ev.get("killed", false):
 					line = "entity %d killed entity %d" % [ev["attacker"], ev["target"]]
-			&"round_reset":
-				line = "round reset"
+			&"respawned":
+				line = "entity %d respawned" % ev["attacker"]
 		if not line.is_empty():
 			print("server: tick %d · %s" % [ev["tick"], line])
 
 
 func _log_stats(now: int) -> void:
 	var rejects := registry.rejected_inputs
-	var line := "server: tick %d · %d player(s) · worst tick %.2f ms" % [now, registry.count(), _tick_usec_max / 1000.0]
+	var line := "server: tick %d · %d player(s) · %d NPC(s) · worst tick %.2f ms" % [now, registry.count(), npcs.npcs.size(), _tick_usec_max / 1000.0]
 	if rejects != _last_logged_rejects:
 		line += " · %d rejected input packet(s) total" % rejects
 		_last_logged_rejects = rejects

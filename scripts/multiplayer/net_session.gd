@@ -8,7 +8,7 @@ extends Node
 ## registry decides what that sender may touch. Server -> client calls are "authority" (peer 1) and
 ## the client checks the sender again before trusting them.
 
-signal join_requested(peer_id: int, version: Variant, player_name: Variant)
+signal join_requested(peer_id: int, version: Variant, player_name: Variant, appearance: Variant)
 signal inputs_received(peer_id: int, epoch: Variant, payload: Variant)
 signal join_accepted_received(entity_id: Variant, epoch: Variant, server_tick: Variant)
 signal join_rejected_received(reason: Variant)
@@ -20,9 +20,9 @@ signal events_received(events: Variant)
 # --- Client -> server ----------------------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable", NetProtocol.CH_CONTROL)
-func request_join(version: Variant, player_name: Variant) -> void:
+func request_join(version: Variant, player_name: Variant, appearance: Variant) -> void:
 	if multiplayer.is_server():
-		join_requested.emit(multiplayer.get_remote_sender_id(), version, player_name)
+		join_requested.emit(multiplayer.get_remote_sender_id(), version, player_name, appearance)
 
 
 @rpc("any_peer", "call_remote", "unreliable", NetProtocol.CH_INPUT)

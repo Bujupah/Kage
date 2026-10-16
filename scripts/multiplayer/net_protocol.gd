@@ -3,9 +3,12 @@ extends RefCounted
 ## Single manifest for the P1 gameplay wire protocol (MULTIPLAYER.md §3). Client and headless server
 ## both read these constants, so channel IDs, limits and the version are never duplicated.
 
-const VERSION := 1 ## Bump on any RPC signature or payload layout change; mismatches are refused.
+const VERSION := 3 ## Bump on any RPC signature or payload layout change; mismatches are refused.
 const DEFAULT_PORT := 7777
-const MAX_PLAYERS := 2
+const MAX_PLAYERS := 16 ## Default region capacity; servers take --max-players.
+const NPC_TEAM := 9000 ## All PvE enemies share one team (no friendly fire among them).
+const KIND_PLAYER := 0
+const KIND_NPC := 1
 
 # ENet transfer channels. Inputs, snapshots and reliable events never share a channel, so a
 # retransmitting reliable event cannot stall the latest-state streams.
@@ -19,7 +22,7 @@ const SERVER_PEER := 1
 ## Confirmed-event whitelist: anything else from the wire is dropped by decode_event().
 const EVENT_TYPES: Array[StringName] = [
 	&"attack_start", &"feint", &"dodge_start", &"hit", &"guarded", &"parried", &"guard_broken",
-	&"dodged", &"round_reset",
+	&"dodged", &"round_reset", &"respawned",
 ]
 const EVENT_INT_KEYS: Array[String] = ["tick", "attacker", "target", "attack_serial", "damage"]
 const EVENT_BOOL_KEYS: Array[String] = ["critical", "killed", "posture_broken", "attacker_broken"]

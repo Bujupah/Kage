@@ -13,6 +13,7 @@ class Peer:
 	var epoch: int
 	var slot: int
 	var display_name: String
+	var appearance: Dictionary = CosmeticCatalog.DEFAULTS.duplicate() ## Sanitised cosmetic IDs.
 	var inputs := PeerInputQueue.new()
 
 const MAX_NAME_LENGTH := 16
@@ -24,7 +25,11 @@ var _next_entity_id := FIRST_ENTITY_ID
 var _rng := RandomNumberGenerator.new()
 
 
-func _init(seed_value: int = 0) -> void:
+var max_players := NetProtocol.MAX_PLAYERS
+
+
+func _init(seed_value: int = 0, capacity: int = NetProtocol.MAX_PLAYERS) -> void:
+	max_players = capacity
 	if seed_value != 0:
 		_rng.seed = seed_value
 	else:
@@ -32,7 +37,7 @@ func _init(seed_value: int = 0) -> void:
 
 
 ## Returns {"peer": Peer} on success or {"reason": String} on refusal.
-func try_join(peer_id: int, version: Variant, requested_name: Variant, now: int = 0) -> Dictionary:
+func try_join(peer_id: int, version: Variant, requested_name: Variant, now: int = 0, appearance: Variant = {}) -> Dictionary:
 	if typeof(version) != TYPE_INT or version != NetProtocol.VERSION:
 		return {"reason": "protocol version mismatch (server %d)" % NetProtocol.VERSION}
 	if _peers.has(peer_id):
@@ -48,6 +53,7 @@ func try_join(peer_id: int, version: Variant, requested_name: Variant, now: int 
 	p.epoch = _rng.randi_range(1, 0x7fffffff)
 	p.display_name = sanitize_name(requested_name, "Ronin %d" % (slot + 1))
 	p.inputs.last_received_tick = now
+	p.appearance = CosmeticCatalog.sanitize(appearance)
 	_peers[peer_id] = p
 	return {"peer": p}
 
@@ -107,7 +113,7 @@ static func sanitize_name(value: Variant, fallback: String) -> String:
 
 
 func _free_slot() -> int:
-	for slot in NetProtocol.MAX_PLAYERS:
+	for slot in max_players:
 		if not _peers.values().any(func(p: Peer) -> bool: return p.slot == slot):
 			return slot
 	return -1

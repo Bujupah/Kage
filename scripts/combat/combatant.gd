@@ -33,6 +33,7 @@ var move: MoveDefinition ## Current attack; null outside State.ATTACK.
 var chain_index := 0 ## Index into weapon.light_chain; -1 for the heavy attack.
 var attack_serial := 0 ## Increments per attack instance; scopes hit de-duplication.
 var life := 0 ## Increments on every reset/respawn, so observers can tell a respawn from movement.
+var zone := ZoneRule.FRONTIER_PVP ## Set by the owner of the world map from the server position.
 var hit_targets: Dictionary = {} ## entity_id -> true for the current attack instance.
 var dodged_targets: Dictionary = {}
 

@@ -166,7 +166,7 @@ func test_tampered_input_never_changes_simulation() -> void:
 
 
 func test_join_validation() -> void:
-	var reg := PeerRegistry.new(7)
+	var reg := PeerRegistry.new(7, 2) # two seats
 	assert_true(reg.try_join(1, NetProtocol.VERSION + 1, "x").has("reason"), "wrong version")
 	assert_true(reg.try_join(1, "1", "x").has("reason"), "non-int version")
 	var first: PeerRegistry.Peer = reg.try_join(1, NetProtocol.VERSION, "x")["peer"]

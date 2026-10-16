@@ -1,35 +1,39 @@
 # Kage (working title: Samurai Assassin)
 
 Third-person PvPvE samurai battleground. Design lives in [GDD.md](GDD.md), boundaries in
-[ARCHITECTURE.md](ARCHITECTURE.md), wire behaviour in [MULTIPLAYER.md](MULTIPLAYER.md).
+[ARCHITECTURE.md](ARCHITECTURE.md), wire behaviour in [MULTIPLAYER.md](MULTIPLAYER.md), world in
+[ENVIRONMENT.md](ENVIRONMENT.md), art in [3DMODELS.md](3DMODELS.md), interface in [GUI.md](GUI.md).
 
-**Current milestone: M1 / P1 — real two-player server.** A headless Godot server runs the same pure,
-tick-based combat rules as the M0 sandbox; two windowed clients duel over ENet with predicted
-movement and server-authoritative hits, parries and death. The single-player sandbox still runs by
-default.
+**Online PvPvE pre-alpha.** A headless Godot region server (16 players by default) runs the pure,
+tick-based combat rules for players and server-driven bandit NPCs. Clients predict their own movement;
+hits, parries, posture, death and zone rules are server-authoritative. Players enter in the Lantern
+Village sanctuary and walk past the vermilion torii into the PvP frontier (bamboo grove, clearing,
+ruin) where the bandit camps are. The client presents it with a 4K-textured samurai (CC0) retargeted
+onto shared animation, armour/blade/scarf cosmetics, Terrain3D hills under a golden-hour HDRI, and a
+Where Winds Meet-style title screen showing your own samurai, plus Armory and Store.
 
 ## Run
 
 Godot **4.7.2** (pinned; see `config/features` in `project.godot`).
 
-Single-player sandbox (default when no role is given):
+Game with menus (splash → first-run accessibility → title menu → Training Dojo / Duel Online):
 
 ```bash
 /Applications/Godot.app/Contents/MacOS/Godot --path .
 ```
 
-Or open the folder in the Godot editor and press F5.
+Or open the folder in the Godot editor and press F5. `-- --sandbox` skips straight to the dojo.
 
 Two-player duel: start the headless server, then two windowed clients (same machine or LAN):
 
 ```bash
-tools/run_server.sh --port=7777
+tools/run_server.sh --port=7777 --max-players=16
 tools/run_client.sh --host=127.0.0.1 --name=Musashi
 tools/run_client.sh --host=127.0.0.1 --name=Kojiro
 ```
 
-The scripts wrap `godot --headless --path . -- --server` and `godot --path . -- --client`; every game
-option goes after `--`. Client options: `--host`, `--port`, `--name`, `--bot=passive|guard|attack|duelist`
+The scripts wrap `godot --headless --path . -- --server` and `godot --path . -- --client` (which joins
+immediately through the UI shell); every game option goes after `--`. Client options: `--host`, `--port`, `--name`, `--bot=passive|guard|attack|duelist`
 (the training AI drives the client), and `--quit-after=SECONDS`. In the editor you can do the same
 with *Debug → Customize Run Instances*. Set `GODOT` to point the scripts at another engine binary.
 
@@ -39,6 +43,17 @@ bot clients over real ENet; it fails on script errors, missing joins or a duel w
 ```bash
 tools/run_tests.sh
 tools/net_smoke.sh 30
+```
+
+Assets are committed. To re-fetch them (all CC0 except two OFL fonts; manifest in
+`assets/third_party/CREDITS.md`), and to render review screenshots without the editor:
+
+```bash
+python3 tools/fetch_assets.py
+```
+
+```bash
+/Applications/Godot.app/Contents/MacOS/Godot --path . -s res://tools/shot.gd -- --level --cam=0,2,-17 --look=0,2,-40 --out=/tmp/torii.png
 ```
 
 ## Controls
@@ -96,24 +111,51 @@ Dummy modes: passive, always-guard (posture pressure), rhythmic attacks (parry p
   - Not predicted yet: attack and dodge starts show up once the server confirms them (one RTT).
     There is no lag compensation (MULTIPLAYER.md §6). Players collide against a proxy of the
     opponent at its newest server position.
+- **World, art and UI** (status tables at the top of ENVIRONMENT.md, 3DMODELS.md, GUI.md):
+  - Region server: sanctuary spawns (`--spawn=arena|frontier` for tests), per-fighter respawn,
+    four PvE bandits that aggro only where combat is legal and leash home. `NpcDirector` drives them
+    with the same intents players send, so they obey every rule.
+  - Character: the Grab3D CC0 samurai (4K PBR, rigged) and both Quaternius CC0 animation libraries
+    are retargeted at import onto Godot's humanoid profile (`assets/retarget/`), so any humanoid body
+    can replace it. The katana grip is derived from the hand bones, and the scarf ties at the cuirass.
+  - Cosmetics: `CosmeticCatalog` (armour lacquers recoloured by shader on the 4K textures, blade
+    finishes, scarves). Appearance is replicated as IDs, the server sanitises them, and they carry
+    no stats. The Armory and Store use live try-on; the wallet is demo currency (no payments yet).
+  - Menu: the 3D `MenuStage` (your samurai on a lit iaidō set, drag to turn, camera framings per
+    screen), serif menu, player card and wallet.
+  - Environment: Terrain3D (MIT) hills with a painted forest floor, instanced grass and an instanced
+    sugi forest; HDRI sky and IBL, AgX tonemapping, volumetric haze. The playable area stays flat for
+    fair combat, and the server never loads the terrain.
+  - Optimization: static batching per material per 32 m cell, box occluders with occlusion culling,
+    chunked MultiMeshes with visibility ranges, auto mesh LODs, on-demand art loading (the server
+    loads none). Settings offer presets, FSR 1/2 and MetalFX upscaling, TAA, SSIL/SDFGI and LOD bias.
+    Village street: 669 → 332 draw calls.
+  - Honest limit: environment modules are still a textured kit (greybox-plus), not authored art.
+    The pipeline (retargeting, cosmetic IDs, batching) is built so bought or commissioned assets
+    drop in.
 
 All frame data is a first guess to be tuned in playtests (GDD §18).
 
 ## Layout
 
 ```text
-scripts/bootstrap/     Boot — picks sandbox / server / client from the command line
-scripts/core/          CombatIntent — the client→server intent payload
+addons/terrain_3d/     Terrain3D GDExtension (MIT), desktop binaries only
+assets/third_party/    downloaded CC0/OFL assets + CREDITS.md (tools/fetch_assets.py)
+assets/retarget/       BoneMaps onto SkeletonProfileHumanoid (tools/make_bone_maps.gd)
+assets/terrain/        packed terrain layers (tools/pack_terrain_textures.gd)
+scripts/bootstrap/     Boot — server / scripted client / UI shell from the command line
+scripts/core/          CombatIntent (client→server intent), ZoneRule (risk taxonomy)
 scripts/combat/        pure authoritative rules (no nodes, no wall clock)
 scripts/multiplayer/   protocol manifest, input/snapshot codecs, RPC surface, client prediction
 scripts/server/        headless duel server and peer admission/input routing
-scripts/world/         DojoLevel — level geometry shared by sandbox, server and clients
-scripts/actors/        FighterBody (physics + visuals), PlayerController, DummyBrain
-scripts/presentation/  camera, HUD, input bindings, contact sparks
-scripts/sandbox/       M0 sandbox wiring
+scripts/world/         RegionMap (zones, landmarks), WorldKit (environment kit), ProvinceLevel
+scripts/actors/        FighterBody (physics + presentation hook), PlayerController, DummyBrain
+scripts/presentation/  AssassinModel, scarf, sword trail, FX, SFX, camera, HUD, input bindings
+scripts/ui/            theme/tokens, settings, UiShell router and every menu screen
+scripts/sandbox/       M0 training dojo wiring
 data/                  move and weapon definitions (.tres)
 tests/                 headless runner + unit tests
-tools/                 run_tests.sh, run_server.sh, run_client.sh, net_smoke.sh
+tools/                 run/test scripts, net_smoke.sh (PvP + PvE), fetch_assets.py, shot.gd, asset tools
 ```
 
 The Godot project sits at the repo root rather than in `game/` as ARCHITECTURE.md §5 suggests;

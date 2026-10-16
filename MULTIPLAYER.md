@@ -395,7 +395,9 @@ One client, one server simulation, simple sword moves, central hit rules, headle
 
 Godot ENet RPC; login may be stubbed only locally; movement inputs, prediction, snapshots, replicated hit/parry/death. No persistent production item ownership yet.
 
-*Status:* implemented. The channel manifest and wire limits live in `scripts/multiplayer/net_protocol.gd`,
+*Status:* implemented and extended into a region server (protocol v3): up to 16 players, sanctuary spawns,
+per-fighter respawn, server-driven PvE NPCs, replicated cosmetic IDs sanitised server-side. The channel
+manifest and wire limits live in `scripts/multiplayer/net_protocol.gd`,
 the input and snapshot layouts in `input_codec.gd` and `snapshot_codec.gd`, and the RPC surface at
 `/root/Match/Session` in `net_session.gd`. Still to measure: WAN RTT/loss (§12), prediction of action
 starts, and lag compensation (§6).

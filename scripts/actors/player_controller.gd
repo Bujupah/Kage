@@ -1,7 +1,8 @@
 class_name PlayerController
 extends Node
 ## Turns local device input into CombatIntents. Presses are accumulated between ticks so a tap
-## shorter than one 33 ms tick is never lost.
+## shorter than one 33 ms tick is never lost. While a menu is open (UiShell) it sends idle intents,
+## so opening the menu online never leaves a button stuck down.
 
 var camera_rig: CameraRig
 var _pressed := 0
@@ -9,12 +10,12 @@ var _sequence := 0
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if UiShell.gameplay_blocked():
+		return
 	if event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if event.is_action_pressed("attack_light"):
 		_pressed |= CombatIntent.LIGHT
 	if event.is_action_pressed("attack_heavy"):
@@ -33,6 +34,9 @@ func sample_intent(body: FighterBody) -> CombatIntent:
 	intent.sequence = _sequence
 	intent.pressed = _pressed
 	_pressed = 0
+	if UiShell.gameplay_blocked():
+		intent.pressed = 0
+		return intent
 	if Input.is_action_pressed("guard"):
 		intent.held |= CombatIntent.GUARD
 	if Input.is_action_pressed("sprint"):

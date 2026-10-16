@@ -22,9 +22,9 @@ var _dead_since := -1
 
 func _ready() -> void:
 	InputBindings.ensure_defaults()
-	DojoLevel.build(self)
-	player = _spawn_fighter(PLAYER_ID, 1, Color(0.22, 0.25, 0.4), Vector3(0, 0, 3), Vector3.FORWARD)
-	dummy = _spawn_fighter(DUMMY_ID, 2, Color(0.5, 0.18, 0.15), Vector3(0, 0, -1), Vector3.BACK)
+	ProvinceLevel.build(self)
+	player = _spawn_fighter(PLAYER_ID, 1, Color(0.13, 0.14, 0.18), Color(0.62, 0.1, 0.08), Vector3(0, 0, 3), Vector3.FORWARD)
+	dummy = _spawn_fighter(DUMMY_ID, 2, Color(0.24, 0.2, 0.16), Color(0.75, 0.68, 0.52), Vector3(0, 0, -1), Vector3.BACK)
 
 	var lockables: Array[FighterBody] = [dummy]
 	camera_rig.setup(player, lockables)
@@ -46,6 +46,8 @@ func _physics_process(delta: float) -> void:
 		PLAYER_ID: player_controller.sample_intent(player),
 		DUMMY_ID: dummy_brain.sample_intent(now),
 	}
+	for c in sim.combatants:
+		c.zone = RegionMap.rule_at(c.position)
 	sim.begin_tick(intents)
 	for f in _fighters:
 		f.simulate_movement(intents[f.combatant.entity_id], now, delta)
@@ -67,10 +69,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_reset_all()
 
 
-func _spawn_fighter(id: int, team: int, color: Color, at: Vector3, face: Vector3) -> FighterBody:
+func _spawn_fighter(id: int, team: int, color: Color, accent: Color, at: Vector3, face: Vector3) -> FighterBody:
 	var body := FighterBody.new()
 	body.name = "Fighter%d" % id
-	body.setup(sim.add(Combatant.new(id, team, KATANA)), color, at, face)
+	body.setup(sim.add(Combatant.new(id, team, KATANA)), color, at, face, accent)
+	# The player wears their equipped look; the training ronin wears black lacquer for contrast.
+	body.appearance = PlayerProfile.appearance() if id == PLAYER_ID else \
+			{"outfit": "arm.obsidian_vow.v1", "blade": "wpn.katana.sumi.v1", "scarf": "scf.shadow_veil.v1"}
 	add_child(body)
 	_fighters.append(body)
 	return body
@@ -97,6 +102,10 @@ func _reset_all() -> void:
 # --- Presentation of confirmed events ------------------------------------------------------------
 
 func _present_event(ev: Dictionary) -> void:
-	if not ev.has("target"):
+	if not ev.has("attacker"):
 		return
-	CombatFx.present_event(self, ev, sim.find(ev["attacker"]).position, sim.find(ev["target"]).position)
+	var a := sim.find(ev["attacker"])
+	if not ev.has("target"):
+		CombatFx.present_solo(self, ev, a.position)
+		return
+	CombatFx.present_event(self, ev, a.position, sim.find(ev["target"]).position)

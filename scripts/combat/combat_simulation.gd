@@ -67,6 +67,8 @@ func _resolve_hits() -> void:
 				continue
 			if a.hit_targets.has(t.entity_id):
 				continue
+			if not ZoneRule.allows_hostile_damage(a.zone) or not ZoneRule.allows_hostile_damage(t.zone):
+				continue # Sanctuary: swings are legal, hostile contact is not (ENVIRONMENT.md §1.3).
 			if HitResolver.in_attack_volume(a, t, a.move):
 				contacts.append([a, a.move, t])
 	for contact in contacts:

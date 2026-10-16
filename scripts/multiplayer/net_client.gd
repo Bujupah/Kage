@@ -1,11 +1,15 @@
 class_name NetClient
 extends Node3D
-## Windowed duel client (MULTIPLAYER.md §5). It never decides combat outcomes:
+## Windowed game client for a region server (MULTIPLAYER.md §5). It never decides combat outcomes:
 ## - its own fighter's movement is predicted from quantized inputs, then reconciled every snapshot by
 ##   rewinding to the server state and replaying the inputs the server has not acknowledged yet;
 ## - remote fighters are interpolated a couple of ticks behind the newest snapshot;
 ## - health, posture, hits, parries and death only change when the server says so.
 ## Attack and dodge starts are not predicted in P1: they appear once confirmed (one RTT later).
+
+signal phase_changed(detail: String, step: int) ## Join progress for LoadingScreen (0..3).
+signal ready_to_play
+signal failed(title: String, reason: String)
 
 const KATANA := preload("res://data/weapons/katana_starter.tres")
 const INTERP_DELAY_TICKS := 2 ## Render remote fighters this far behind the newest snapshot.
@@ -14,8 +18,11 @@ const INPUT_REDUNDANCY := 4 ## Each packet repeats the newest unacked inputs to 
 const MAX_PENDING_INPUTS := 90 ## ~3 s; older unacked inputs are dropped, not replayed forever.
 const SNAP_DISTANCE := 2.0 ## Corrections larger than this teleport instead of blending.
 const STATS_EVERY_TICKS := CombatSimulation.TICK_RATE * 10
-const COLORS := [Color(0.22, 0.25, 0.4), Color(0.5, 0.18, 0.15)]
-const HELP := "WASD move · Shift sprint · LMB light · E heavy\nRMB / Q guard (tap on impact = parry)\nE then RMB during windup = feint · Space dodge\nTab / MMB lock-on · Esc free mouse"
+const JOIN_TIMEOUT_MSEC := 8000
+const HIDDEN := Vector3(0, -100, 0) ## Parking spot for bodies and proxies before their first snapshot.
+const TARGET_RANGE := 25.0 ## HUD target panel and bots consider fighters this close. ## Give up on connect + join well before ENet's ~30 s timeout.
+const COLORS := [Color(0.13, 0.14, 0.18), Color(0.2, 0.15, 0.13)]
+const ACCENTS := [Color(0.62, 0.1, 0.08), Color(0.2, 0.28, 0.55)] ## Scarf/sash per slot.
 
 var host := "127.0.0.1"
 var port := NetProtocol.DEFAULT_PORT
@@ -48,21 +55,18 @@ var _predict_tick := 0 ## Server tick the newest predicted input is expected to 
 var _server_tick_est := -1.0
 var _status := "connecting…"
 var _overview_camera := Camera3D.new()
-var _lobby_label := Label.new()
+var _ready_emitted := false
+var _join_deadline := 0
+var _failed := false
 
 
 func _ready() -> void:
 	InputBindings.ensure_defaults()
-	DojoLevel.build(self)
+	ProvinceLevel.build(self)
 	_overview_camera.position = Vector3(0, 9, 11)
 	_overview_camera.rotation_degrees = Vector3(-38, 0, 0)
 	add_child(_overview_camera)
 	_overview_camera.make_current()
-	var lobby := CanvasLayer.new()
-	_lobby_label.position = Vector2(20, 20)
-	_lobby_label.add_theme_font_size_override("font_size", 18)
-	lobby.add_child(_lobby_label)
-	add_child(lobby)
 
 	session.name = "Session"
 	add_child(session)
@@ -76,17 +80,30 @@ func _ready() -> void:
 	var err := peer.create_client(host, port)
 	if err != OK:
 		_status = "cannot create client: %s" % error_string(err)
+		_fail.call_deferred("Can't start connection", "%s (%s)." % [_status, host])
 		return
 	multiplayer.multiplayer_peer = peer
+	_join_deadline = Time.get_ticks_msec() + JOIN_TIMEOUT_MSEC
 	multiplayer.connected_to_server.connect(_on_connected)
 	multiplayer.connection_failed.connect(func() -> void:
 		_status = "connection to %s:%d failed" % [host, port]
-		print("client: " + _status))
+		print("client: " + _status)
+		_fail("Can't reach server", "No answer from %s:%d. Check the address and that the server is running." % [host, port]))
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	_status = "connecting to %s:%d…" % [host, port]
+	phase_changed.emit.call_deferred("Contacting %s:%d" % [host, port], 0)
 
 
 func _physics_process(delta: float) -> void:
+	if local_entity_id < 0 and _join_deadline > 0 and Time.get_ticks_msec() > _join_deadline:
+		_join_deadline = 0
+		var reached := multiplayer.multiplayer_peer != null and \
+				multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+		_fail("Can't reach server" if not reached else "No answer from server",
+				"No response from %s:%d within %d s. Check the address and that the server is running." % [host, port, JOIN_TIMEOUT_MSEC / 1000]
+				if not reached else "Connected, but the server never seated you. It may be busy or running another version.")
+		if multiplayer.multiplayer_peer != null:
+			multiplayer.multiplayer_peer.close()
 	if _server_tick_est >= 0.0:
 		_server_tick_est += 1.0
 	var snapshot := inbox.take()
@@ -98,6 +115,8 @@ func _physics_process(delta: float) -> void:
 		_proxies_settling = false
 		_set_fighter_collision(local, true)
 	_update_remotes()
+	if hud != null and Engine.get_physics_frames() % 6 == 0:
+		hud.set_target(_nearest_target(), _names)
 	_update_status()
 
 
@@ -105,28 +124,33 @@ func _physics_process(delta: float) -> void:
 
 func _on_connected() -> void:
 	_status = "connected, joining…"
-	session.request_join.rpc_id(NetProtocol.SERVER_PEER, NetProtocol.VERSION, player_name)
+	phase_changed.emit("Presenting your identity to the region server", 1)
+	session.request_join.rpc_id(NetProtocol.SERVER_PEER, NetProtocol.VERSION, player_name, PlayerProfile.appearance())
 
 
 func _on_join_accepted(entity_id: Variant, epoch: Variant, server_tick: Variant) -> void:
 	if typeof(entity_id) != TYPE_INT or typeof(epoch) != TYPE_INT or typeof(server_tick) != TYPE_INT:
 		return
 	local_entity_id = entity_id
+	_join_deadline = 0
 	_epoch = epoch
 	_predict_tick = server_tick
 	_server_tick_est = server_tick
 	_status = "joined"
 	print("client: joined as entity %d at server tick %d" % [entity_id, server_tick])
+	phase_changed.emit("Waiting for the first world snapshot", 2)
 
 
 func _on_join_rejected(reason: Variant) -> void:
 	_status = "refused by server: %s" % str(reason)
 	print("client: " + _status)
+	_fail("Join refused", "The server refused to seat you: %s." % str(reason))
 
 
 func _on_server_disconnected() -> void:
 	_status = "disconnected from server"
 	print("client: " + _status)
+	_fail("Connection lost", "The server closed the connection.")
 	multiplayer.multiplayer_peer = null
 	local_entity_id = -1
 	inbox.reset()
@@ -138,26 +162,32 @@ func _on_roster(entries: Variant) -> void:
 		return
 	var seen := {}
 	for e: Variant in entries:
-		if typeof(e) != TYPE_ARRAY or e.size() != 3 or typeof(e[0]) != TYPE_INT \
+		if typeof(e) != TYPE_ARRAY or e.size() != 4 or typeof(e[0]) != TYPE_INT \
 				or typeof(e[1]) != TYPE_INT or typeof(e[2]) != TYPE_STRING \
-				or e[1] < 0 or e[1] >= DojoLevel.SPAWNS.size():
+				or not (e[1] in [NetProtocol.KIND_PLAYER, NetProtocol.KIND_NPC]):
 			continue
 		var id: int = e[0]
 		seen[id] = true
 		_names[id] = e[2]
+		var look := CosmeticCatalog.sanitize(e[3])
 		if not _bodies.has(id):
-			_spawn(id, e[1])
+			_spawn(id, e[1], look)
+		elif (_bodies[id] as FighterBody).model != null:
+			(_bodies[id] as FighterBody).model.apply_appearance(look)
 	for id: int in _bodies.keys():
 		if not seen.has(id):
 			_despawn(id)
 	_refresh_hud()
 
 
-func _spawn(id: int, slot: int) -> void:
-	var spawn: Array = DojoLevel.SPAWNS[slot]
+## Players and NPCs look alike to the client; only the roster kind and name differ. Position comes
+## from the first snapshot, so a new body stays hidden until then.
+func _spawn(id: int, kind: int, look: Dictionary = {}) -> void:
 	var body := FighterBody.new()
 	body.name = "Fighter%d" % id
-	body.setup(Combatant.new(id, slot + 1, KATANA), COLORS[slot % COLORS.size()], spawn[0], spawn[1])
+	var team := NetProtocol.NPC_TEAM if kind == NetProtocol.KIND_NPC else id
+	body.setup(Combatant.new(id, team, KATANA), COLORS[0], HIDDEN, Vector3.FORWARD, ACCENTS[id % ACCENTS.size()])
+	body.appearance = look
 	add_child(body)
 	_bodies[id] = body
 	if id == local_entity_id:
@@ -175,8 +205,9 @@ func _spawn(id: int, slot: int) -> void:
 		# will collide with when our input arrives.
 		body.collision_layer = 0
 		body.collision_mask = 0
+		body.visible = false
 		_buffers[id] = InterpolationBuffer.new()
-		_proxies[id] = _make_proxy(spawn[0])
+		_proxies[id] = _make_proxy(HIDDEN)
 	if camera_rig != null:
 		camera_rig.candidates.assign(_bodies.values().filter(
 				func(b: FighterBody) -> bool: return b.combatant.entity_id != local_entity_id))
@@ -213,20 +244,36 @@ func _make_proxy(at: Vector3) -> StaticBody3D:
 	return proxy
 
 
+## Nearest living fighter within TARGET_RANGE (the camera lock target wins when set).
+func _nearest_target() -> FighterBody:
+	var local: FighterBody = _bodies.get(local_entity_id)
+	if local == null:
+		return null
+	if camera_rig != null and camera_rig.lock_target != null and is_instance_valid(camera_rig.lock_target):
+		return camera_rig.lock_target
+	var best: FighterBody = null
+	var best_d := TARGET_RANGE
+	for id: int in _bodies:
+		var b: FighterBody = _bodies[id]
+		if id == local_entity_id or not b.visible or not b.combatant.is_alive():
+			continue
+		var d := local.global_position.distance_to(b.global_position)
+		if d < best_d:
+			best_d = d
+			best = b
+	return best
+
+
 func _refresh_hud() -> void:
 	var local: FighterBody = _bodies.get(local_entity_id)
-	var opponent: FighterBody = null
-	for id: int in _bodies:
-		if id != local_entity_id:
-			opponent = _bodies[id]
+	var opponent := _nearest_target()
 	if hud != null:
 		hud.set_target(opponent, _names)
 	elif local != null:
 		hud = CombatHud.new()
 		hud.setup(local, opponent, _names)
-		hud.set_help_text(HELP)
+		hud.online = true
 		add_child(hud)
-		_lobby_label.hide()
 
 
 # --- Prediction and reconciliation ---------------------------------------------------------------
@@ -248,14 +295,13 @@ func _sample_intent(local: FighterBody) -> CombatIntent:
 	if bot_mode < 0:
 		intent = player_controller.sample_intent(local)
 	else:
-		var opponent: FighterBody = null
-		for id: int in _bodies:
-			if id != local_entity_id:
-				opponent = _bodies[id]
+		var opponent := _nearest_target()
 		if _bot == null and opponent != null:
 			_bot = DummyBrain.new(local, opponent)
 			_bot.mode = bot_mode as DummyBrain.Mode
 			_bot.reset(_predict_tick)
+		elif _bot != null and opponent != null:
+			_bot.target = opponent
 		intent = _bot.sample_intent(_predict_tick + 1) if _bot != null else CombatIntent.new()
 	_sequence += 1
 	intent.sequence = _sequence
@@ -285,6 +331,10 @@ func _apply_snapshot(snapshot: Dictionary, delta: float) -> void:
 			continue # Roster (reliable) has not arrived yet.
 		if id == local_entity_id:
 			_reconcile(_bodies[id], rec, tick, snapshot["ack"], delta)
+			if not _ready_emitted:
+				_ready_emitted = true
+				phase_changed.emit("In the province", 3)
+				ready_to_play.emit()
 		elif _buffers.has(id):
 			(_buffers[id] as InterpolationBuffer).push(tick, SnapshotCodec.position_of(rec),
 					rec[SnapshotCodec.YAW], rec)
@@ -325,6 +375,19 @@ func _set_fighter_collision(local: FighterBody, enabled: bool) -> void:
 	local.collision_mask = FighterBody.WORLD_LAYER | (FighterBody.FIGHTER_LAYER if enabled else 0)
 
 
+func _fail(title: String, reason: String) -> void:
+	if _failed:
+		return # One explanation per session; a timeout followed by ENet's own failure is one event.
+	_failed = true
+	failed.emit(title, reason)
+
+
+func _exit_tree() -> void:
+	if multiplayer.multiplayer_peer != null and not (multiplayer.multiplayer_peer is OfflineMultiplayerPeer):
+		multiplayer.multiplayer_peer.close()
+		multiplayer.multiplayer_peer = null
+
+
 # --- Remote interpolation ------------------------------------------------------------------------
 
 func _update_remotes() -> void:
@@ -338,6 +401,10 @@ func _update_remotes() -> void:
 			continue
 		var body: FighterBody = _bodies[id]
 		var c := body.combatant
+		if not body.visible:
+			body.visible = true
+			body.global_position = s["position"]
+			body.reset_physics_interpolation()
 		var jump := body.global_position.distance_to(s["position"])
 		var respawned: bool = s["record"][SnapshotCodec.LIFE] != c.life
 		SnapshotCodec.apply_combat_state(c, s["record"])
@@ -364,7 +431,9 @@ func _on_events(raw: Variant) -> void:
 		var a: FighterBody = _bodies.get(ev.get("attacker", -1))
 		var t: FighterBody = _bodies.get(ev.get("target", -1))
 		if a != null and t != null:
-			CombatFx.present_event(self, ev, a.combatant.position, t.combatant.position)
+			CombatFx.present_event(self, ev, a.global_position, t.global_position)
+		elif a != null:
+			CombatFx.present_solo(self, ev, a.global_position)
 	if hud != null:
 		hud.push_events(events)
 
@@ -381,7 +450,7 @@ func _update_status() -> void:
 		_pending.size(), correction_last, Engine.get_frames_per_second()]
 	if hud != null:
 		hud.set_status_text(text)
-	_lobby_label.text = text
+		hud.set_latency(rtt)
 	if local_entity_id >= 0 and _predict_tick % STATS_EVERY_TICKS == 0:
 		print("client: tick %d · rtt %d ms · unacked %d · worst correction %.3f m · teleports %d · stale snapshots dropped %d" % [
 			_predict_tick, rtt, _pending.size(), correction_max, teleports, inbox.stale_dropped])
