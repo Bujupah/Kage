@@ -29,8 +29,11 @@ static func material(tex_id: String, metres: float = 2.0, tint: Color = Color.WH
 	if _materials.has(key):
 		return _materials[key]
 	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = load(TEX_DIR % [tex_id, tex_id, "diff"])
 	mat.albedo_color = tint
+	if not AssetKit.visuals_enabled():
+		_materials[key] = mat # Headless server: geometry and colliders only, never texture loads.
+		return mat
+	mat.albedo_texture = load(TEX_DIR % [tex_id, tex_id, "diff"])
 	var arm_path := TEX_DIR % [tex_id, tex_id, "arm"]
 	if ResourceLoader.exists(arm_path):
 		var arm: Texture2D = load(arm_path)
@@ -139,9 +142,13 @@ static func cylinder(parent: Node3D, base: Vector3, radius: float, height: float
 ## A Poly Haven prop instance (cached scene); `collider` adds a box of that size at its base.
 static func prop(parent: Node3D, id: String, at: Vector3, yaw_deg: float = 0.0, scale: float = 1.0,
 		collider: Vector3 = Vector3.ZERO) -> Node3D:
-	if not _props.has(id):
-		_props[id] = load(PROPS_DIR % [id, id])
-	var node: Node3D = (_props[id] as PackedScene).instantiate()
+	var node: Node3D
+	if AssetKit.visuals_enabled():
+		if not _props.has(id):
+			_props[id] = load(PROPS_DIR % [id, id])
+		node = (_props[id] as PackedScene).instantiate()
+	else:
+		node = Node3D.new() # Headless server: the collider below is all that matters.
 	node.position = at
 	node.rotation_degrees.y = yaw_deg
 	node.scale = Vector3.ONE * scale

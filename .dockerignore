@@ -1,0 +1,8 @@
+# The dedicated server needs code, data and the model-bounds manifest only; no art, tools or docs.
+*
+!project.godot
+!icon.svg
+!scripts/
+!scenes/
+!data/
+!assets/third_party/sketchfab/manifest.json

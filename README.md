@@ -58,6 +58,34 @@ python3 tools/fetch_assets.py
 /Applications/Godot.app/Contents/MacOS/Godot --path . -s res://tools/shot.gd -- --level --cam=0,2,-17 --look=0,2,-40 --out=/tmp/torii.png
 ```
 
+### Dedicated server in Docker
+
+The `Dockerfile` packages the headless region server (Godot 4.7.2, code and data only, no art):
+about 108 MB to download. GitHub Actions (`.github/workflows/server-image.yml`) smoke-tests it on
+every push to `main` that touches server code and publishes `ghcr.io/bujupah/kage-server:latest`
+plus a `sha-<commit>` tag.
+
+```bash
+docker build -t kage-server .
+docker run --rm -p 7777:7777/udp kage-server
+```
+
+Arguments after the image name replace the defaults (`--server --port=7777 --max-players=16`),
+e.g. `docker run -p 7777:7777/udp ghcr.io/bujupah/kage-server --server --port=7777 --max-players=32`.
+
+**Hosting needs UDP.** ENet runs over UDP, so platforms that only route HTTP (Render, Heroku,
+Cloud Run) cannot host the game server. On an UpCloud Cloud Server (any Linux plan with Docker):
+
+```bash
+docker run -d --name kage --restart unless-stopped -p 7777:7777/udp ghcr.io/bujupah/kage-server:latest
+docker logs -f kage
+```
+
+Allow inbound **UDP 7777** in the server's firewall (UpCloud Hub → server → Firewall), then join
+with `tools/run_client.sh --host=<server IP>`, or add `<server IP>:7777` to the province server list under *Enter the
+Province* in game. To update: `docker pull ghcr.io/bujupah/kage-server:latest && docker rm -f kage`
+and run it again.
+
 ## Controls
 
 | Action | Keyboard / mouse | Gamepad |

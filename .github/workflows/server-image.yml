@@ -1,0 +1,76 @@
+# Builds the dedicated server image, smoke-tests it, and publishes it to GitHub Container Registry:
+#   ghcr.io/<owner>/kage-server:latest   (main)
+#   ghcr.io/<owner>/kage-server:sha-<short>
+name: Server image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/**"
+      - "scenes/**"
+      - "data/**"
+      - "project.godot"
+      - "assets/third_party/sketchfab/manifest.json"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/server-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image name
+        id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kage-server" >> "$GITHUB_OUTPUT"
+
+      - name: Build for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: kage-server:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (server boots, listens, ticks)
+        run: |
+          docker run --rm kage-server:test --server --port=7777 --quit-after=12 > server.log 2>&1 || true
+          cat server.log
+          grep -q "listening on UDP 7777" server.log
+          grep -q "tick 300" server.log
+          ! grep -q "SCRIPT ERROR" server.log
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ steps.name.outputs.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+
+      - name: Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
